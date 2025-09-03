@@ -1,0 +1,88 @@
+import { pool } from '../database'
+
+// 笔记相关的数据库操作
+export const noteData = {
+  // 获取笔记列表
+  getNotes: async (userId: string) => {
+    try {
+      const [rows] = await pool.execute(
+        'SELECT * FROM notes WHERE user_id = ? ORDER BY updated_at DESC',
+        [userId]
+      )
+      return rows as any[]
+    } catch (error) {
+      console.error('获取笔记列表失败:', error)
+      throw error
+    }
+  },
+
+  // 获取笔记详情
+  getNoteById: async (id: string, userId: string) => {
+    try {
+      const [rows] = await pool.execute(
+        'SELECT * FROM notes WHERE id = ? AND user_id = ?',
+        [id, userId]
+      )
+      const notes = rows as any[]
+      return notes.length > 0 ? notes[0] : null
+    } catch (error) {
+      console.error('获取笔记详情失败:', error)
+      throw error
+    }
+  },
+
+  // 创建笔记
+  createNote: async (title: string, content: string, userId: string) => {
+    try {
+      const id = Date.now().toString()
+      const [result] = await pool.execute(
+        'INSERT INTO notes (id, title, content, user_id) VALUES (?, ?, ?, ?)',
+        [id, title, content, userId]
+      )
+      
+      // 返回创建的笔记
+      return await noteData.getNoteById(id, userId)
+    } catch (error) {
+      console.error('创建笔记失败:', error)
+      throw error
+    }
+  },
+
+  // 更新笔记
+  updateNote: async (id: string, title: string, content: string, userId: string) => {
+    try {
+      const [result] = await pool.execute(
+        'UPDATE notes SET title = ?, content = ? WHERE id = ? AND user_id = ?',
+        [title, content, id, userId]
+      )
+      
+      // 检查是否更新成功
+      const affectedRows = (result as any).affectedRows
+      if (affectedRows === 0) {
+        return null
+      }
+      
+      // 返回更新后的笔记
+      return await noteData.getNoteById(id, userId)
+    } catch (error) {
+      console.error('更新笔记失败:', error)
+      throw error
+    }
+  },
+
+  // 删除笔记
+  deleteNote: async (id: string, userId: string) => {
+    try {
+      const [result] = await pool.execute(
+        'DELETE FROM notes WHERE id = ? AND user_id = ?',
+        [id, userId]
+      )
+      
+      const affectedRows = (result as any).affectedRows
+      return affectedRows > 0
+    } catch (error) {
+      console.error('删除笔记失败:', error)
+      throw error
+    }
+  }
+}

@@ -19,9 +19,10 @@ console.log(routes);
 			<v-btn icon="mdi-account-card"></v-btn>
 		</template>
 		<template #drawer>
-			<v-list-item link title="模具" prepend-icon="mdi-anvil"></v-list-item>
-			<v-list-item link title="列表2" prepend-icon="mdi-view-list"></v-list-item>
-			<v-list-item link title="列表3" prepend-icon="mdi-view-list"></v-list-item>
+			<v-list-item link title="首页" prepend-icon="mdi-home" to="/"></v-list-item>
+			<v-list-item link title="笔记" prepend-icon="mdi-note-text" to="/notes"></v-list-item>
+			<v-list-item link title="关于" prepend-icon="mdi-information" to="/about"></v-list-item>
+			<v-list-item link title="设置" prepend-icon="mdi-cog" to="/setting"></v-list-item>
 		</template>
 	</Normal>
 

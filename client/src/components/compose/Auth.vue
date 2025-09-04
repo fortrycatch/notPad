@@ -26,8 +26,10 @@ const login = async () => {
         username: username.value,
         password: password.value
     });
-    if (res.success) {
+    if (res.success && res.token) {
         useMainStore().authenticated = true;
+        useMainStore().token = res.token;
+        alert('token: ' + res.token);
     } else {
         alert('Login failed');
     }

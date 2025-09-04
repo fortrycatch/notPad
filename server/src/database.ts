@@ -1,0 +1,72 @@
+import mysql from 'mysql2/promise'
+import dotenv from 'dotenv'
+
+// 加载环境变量
+dotenv.config()
+
+// 数据库配置
+const dbConfig = {
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '3306'),
+  user: process.env.DB_USER || 'mdp_playground',
+  password: process.env.DB_PASSWORD || 'mawhEk7Ky3pKJfjn',
+  database: process.env.DB_NAME || 'mdp_playground',
+  charset: 'utf8mb4',
+  timezone: '+08:00'
+}
+
+// 创建数据库连接池
+export const pool = mysql.createPool({
+  ...dbConfig,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+})
+
+// 初始化数据库表
+export async function initDatabase() {
+  try {
+    const connection = await pool.getConnection()
+    
+    // 创建数据库（如果不存在）
+    await connection.execute(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
+    
+    // 使用数据库
+    await connection.execute(`USE ${dbConfig.database}`)
+    
+    // 创建笔记表
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS notes (
+        id VARCHAR(36) PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        content TEXT NOT NULL,
+        user_id VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_created_at (created_at),
+        INDEX idx_updated_at (updated_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `)
+    
+    connection.release()
+    console.log('数据库初始化完成')
+  } catch (error) {
+    console.error('数据库初始化失败:', error)
+    throw error
+  }
+}
+
+// 测试数据库连接
+export async function testConnection() {
+  try {
+    const connection = await pool.getConnection()
+    await connection.ping()
+    connection.release()
+    console.log('数据库连接成功')
+    return true
+  } catch (error) {
+    console.error('数据库连接失败:', error)
+    return false
+  }
+}

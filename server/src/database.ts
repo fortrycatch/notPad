@@ -1,16 +1,15 @@
 import mysql from 'mysql2/promise'
 import dotenv from 'dotenv'
-
+console.log(process.env.NODE_ENV)
 // 加载环境变量
 dotenv.config()
-
 // 数据库配置
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
   port: parseInt(process.env.DB_PORT || '3306'),
-  user: process.env.DB_USER || 'mdp_playground',
-  password: process.env.DB_PASSWORD || 'mawhEk7Ky3pKJfjn',
-  database: process.env.DB_NAME || 'mdp_playground',
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || 'root',
+  database: process.env.DB_NAME || 'playground',
   charset: 'utf8mb4',
   timezone: '+08:00'
 }

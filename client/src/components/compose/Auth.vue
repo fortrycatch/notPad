@@ -29,7 +29,8 @@ const login = async () => {
     if (res.success && res.token) {
         useMainStore().authenticated = true;
         useMainStore().token = res.token;
-        alert('token: ' + res.token);
+        // alert('token: ' + res.token);
+        localStorage.setItem("token", res.token);
     } else {
         alert('Login failed');
     }

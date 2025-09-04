@@ -228,7 +228,7 @@ const fetchNotes = async () => {
 
 // 查看笔记详情
 const viewNote = (id: string) => {
-  router.push(`/notes/${id}`)
+  router.push(`/note/${id}`)
 }
 
 // 编辑笔记

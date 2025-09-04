@@ -3,6 +3,9 @@
 // import { server } from "./server";
 import Normal from "./components/frame/Normal.vue";
 import routes from "~pages";
+import { onMounted } from "vue";
+import { uigo } from "./easyKit";
+import { useMainStore } from "./store/mainStore";
 // const test = ref("null");
 // const input = ref("");
 // async function hello() {
@@ -10,6 +13,15 @@ import routes from "~pages";
 // 	test.value = res;
 // }
 console.log(routes);
+import { server } from "./server";
+onMounted(async () => {
+	if(await server.verifyToken.query(localStorage.getItem("token") || "") == false){
+		uigo("/login");
+	}else{
+		useMainStore().authenticated = true;
+		useMainStore().token = localStorage.getItem("token") || "";
+	}
+});
 </script>
 
 <template>

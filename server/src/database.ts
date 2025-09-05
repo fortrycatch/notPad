@@ -31,7 +31,7 @@ export async function initDatabase() {
     await connection.execute(`CREATE DATABASE IF NOT EXISTS ${dbConfig.database} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
     
     // 使用数据库
-    await connection.execute(`USE ${dbConfig.database}`)
+    await connection.query(`USE ${dbConfig.database}`)
     
     // 创建笔记表
     await connection.execute(`

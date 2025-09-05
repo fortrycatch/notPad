@@ -3,8 +3,8 @@
     "exclude": ["node_modules"],
     "compilerOptions": {
         "target": "ES2023",
-        "module": "esnext",
-        "moduleResolution": "node",
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
         "esModuleInterop": true,
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,

@@ -1,4 +1,4 @@
-import { pool } from '../database'
+import { pool } from '../database.js'
 
 // 笔记相关的数据库操作
 export const noteData = {

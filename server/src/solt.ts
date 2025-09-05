@@ -1,5 +1,5 @@
 import type { CreateHTTPContextOptions } from "@trpc/server/adapters/standalone";
-import { basicData } from "./basicData";
+import { basicData } from "./basicData.js";
 async function auth(opts: CreateHTTPContextOptions) {
     const { req } = opts;
     const token = req.headers.token == basicData.token;

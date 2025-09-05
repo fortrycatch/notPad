@@ -5,10 +5,10 @@ import { readFileSync, writeFileSync, accessSync, constants } from "node:fs";
  * 通用数据管理类
  * 支持自动持久化和响应式更新
  */
-export class DataManager<T = any> {
+export class DataManager<T extends object = any> {
     private filePath: string;
-    private data: T;
-    private proxy: T;
+    private data!: T; // 使用断言操作符，表示该属性会在构造函数中被初始化
+    private proxy!: T; // 使用断言操作符，表示该属性会在构造函数中被初始化
 
     constructor(filePath: string, defaultData: T) {
         this.filePath = filePath;

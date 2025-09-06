@@ -2,15 +2,15 @@
   <v-container>
     <v-row>
       <v-col cols="12">
-        <div class="d-flex justify-space-between align-center mb-6">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
           <v-btn
             prepend-icon="mdi-arrow-left"
-            variant="outlined"
+            
             @click="goBack"
           >
             返回
           </v-btn>
-          <div class="d-flex gap-2">
+          <div class="tool-bar">
             <v-btn
               prepend-icon="mdi-pencil"
               color="primary"
@@ -22,7 +22,6 @@
             <v-btn
               prepend-icon="mdi-delete"
               color="error"
-              variant="outlined"
               @click="showDeleteDialog = true"
               v-if="!editMode"
             >
@@ -34,13 +33,13 @@
     </v-row>
 
     <v-row v-if="loading">
-      <v-col cols="12" class="text-center">
+      <v-col cols="12" style="text-align: center;">
         <v-progress-circular
           indeterminate
           color="primary"
           size="64"
         ></v-progress-circular>
-        <p class="mt-4 text-body-1">加载中...</p>
+        <p style="margin-top: 16px;" class="text-body-1">加载中...</p>
       </v-col>
     </v-row>
 
@@ -48,63 +47,63 @@
       <v-col cols="12">
         <v-card elevation="2">
           <div v-if="!editMode" class="view-mode">
-            <v-card-title class="text-h4 font-weight-bold pa-6">
+            <v-card-title class="text-h4 font-weight-bold" style="padding: 24px;">
               {{ note.title }}
             </v-card-title>
             
-            <v-card-subtitle class="pa-6 pt-0">
-              <div class="d-flex gap-4">
+            <v-card-subtitle style="padding: 24px; padding-top: 0;">
+              <div style="display: flex; gap: 16px;">
                 <v-chip
                   size="small"
                   color="grey"
-                  variant="outlined"
+                  
                   prepend-icon="mdi-calendar-plus"
                 >
-                  创建时间: {{ formatDate(note.createdAt) }}
+                  创建时间: {{ formatDate(note.created_at) }}
                 </v-chip>
                 <v-chip
                   size="small"
                   color="grey"
-                  variant="outlined"
+                  
                   prepend-icon="mdi-calendar-edit"
                 >
-                  更新时间: {{ formatDate(note.updatedAt) }}
+                  更新时间: {{ formatDate(note.updated_at) }}
                 </v-chip>
               </div>
             </v-card-subtitle>
 
-            <v-card-text class="pa-6 pt-0">
+            <v-card-text style="padding: 24px; padding-top: 0;">
               <div class="text-body-1" style="white-space: pre-wrap; line-height: 1.8;">
                 {{ note.content }}
               </div>
             </v-card-text>
           </div>
 
-          <div v-else class="edit-mode pa-6">
+          <div v-else class="edit-mode" style="padding: 24px;">
             <v-form @submit.prevent="saveChanges">
               <v-text-field
                 v-model="editForm.title"
                 label="标题"
                 placeholder="请输入笔记标题"
-                variant="outlined"
+                
                 required
-                class="mb-4"
+                style="margin-bottom: 16px;"
               ></v-text-field>
 
               <v-textarea
                 v-model="editForm.content"
                 label="内容"
                 placeholder="请输入笔记内容"
-                variant="outlined"
+                
                 rows="20"
                 auto-grow
                 required
               ></v-textarea>
             </v-form>
 
-            <div class="d-flex justify-end gap-2 mt-6">
+            <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px;">
               <v-btn
-                variant="outlined"
+                
                 @click="cancelEdit"
               >
                 取消
@@ -123,19 +122,19 @@
     </v-row>
 
     <v-row v-else>
-      <v-col cols="12" class="text-center">
+      <v-col cols="12" style="text-align: center;">
         <v-card class="error-state" elevation="0">
           <v-card-text>
-            <v-icon size="64" color="error" class="mb-4">
+            <v-icon size="64" color="error" style="margin-bottom: 16px;">
               mdi-alert-circle-outline
             </v-icon>
-            <h2 class="text-h5 mb-2">笔记不存在</h2>
-            <p class="text-body-2 text-medium-emphasis mb-4">
+            <h2 class="text-h5" style="margin-bottom: 8px;">笔记不存在</h2>
+            <p class="text-body-2 text-medium-emphasis" style="margin-bottom: 16px;">
               该笔记可能已被删除或不存在
             </p>
             <v-btn
               prepend-icon="mdi-arrow-left"
-              variant="outlined"
+              
               @click="goBack"
             >
               返回列表
@@ -149,7 +148,7 @@
     <v-dialog v-model="showDeleteDialog" max-width="400">
       <v-card>
         <v-card-title class="text-h6">
-          <v-icon color="error" class="mr-2">mdi-alert</v-icon>
+          <v-icon color="error" style="margin-right: 8px;">mdi-alert</v-icon>
           确认删除
         </v-card-title>
         <v-card-text>
@@ -158,7 +157,7 @@
         <v-card-actions>
           <v-spacer></v-spacer>
           <v-btn
-            variant="outlined"
+            
             @click="showDeleteDialog = false"
           >
             取消
@@ -180,7 +179,6 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { server } from '../../server'
-
 const route = useRoute()
 const router = useRouter()
 
@@ -188,8 +186,8 @@ interface Note {
   id: string
   title: string
   content: string
-  createdAt: string
-  updatedAt: string
+  created_at: string
+  updated_at: string
   userId: string
 }
 
@@ -289,5 +287,10 @@ onMounted(() => {
 <style scoped>
 .error-state {
   padding: 60px 20px;
+}
+.tool-bar {
+  >* {
+    margin-left: 8px;
+  }
 }
 </style>

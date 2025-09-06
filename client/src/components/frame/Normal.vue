@@ -13,9 +13,9 @@
             <div class="main">
                 <slot />
                 <router-view v-slot="{ Component }">
-                    <transition name="slide-fade" mode="out-in">
+                    <!-- <transition name="slide-fade" mode="out-in"> -->
                         <component :is="Component" />
-                    </transition>
+                    <!-- </transition> -->
                 </router-view>
             </div>
         </v-main>

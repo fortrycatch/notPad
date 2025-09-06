@@ -15,8 +15,8 @@ import { useMainStore } from "./store/mainStore";
 console.log(routes);
 import { server } from "./server";
 onMounted(async () => {
-	if(await server.verifyToken.query(localStorage.getItem("token") || "") == false){
-		uigo("/login");
+	if(await server.auth.verifyToken.query(localStorage.getItem("token") || "") == false){
+		useMainStore().authenticated = false;
 	}else{
 		useMainStore().authenticated = true;
 		useMainStore().token = localStorage.getItem("token") || "";
@@ -33,6 +33,7 @@ onMounted(async () => {
 		<template #drawer>
 			<v-list-item link title="首页" prepend-icon="mdi-home" to="/"></v-list-item>
 			<v-list-item link title="笔记" prepend-icon="mdi-note-text" to="/notes"></v-list-item>
+			<v-list-item link title="图床" prepend-icon="mdi-image" to="/image"></v-list-item>
 			<v-list-item link title="关于" prepend-icon="mdi-information" to="/about"></v-list-item>
 			<v-list-item link title="设置" prepend-icon="mdi-cog" to="/setting"></v-list-item>
 		</template>

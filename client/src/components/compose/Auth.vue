@@ -1,5 +1,5 @@
 <template>
-    <transition name="slide-fade" mode="out-in">
+    <!-- <transition name="slide-fade" mode="out-in"> -->
         <div class="auth-background">
             <div class="auth-container">
                 <div class="auth-title">
@@ -12,7 +12,7 @@
                 </div>
             </div>
         </div>
-    </transition>
+    <!-- </transition> -->
 </template>
 
 <script setup lang="ts">

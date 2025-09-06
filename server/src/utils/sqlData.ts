@@ -3,11 +3,11 @@ import { pool } from '../database.js'
 // 笔记相关的数据库操作
 export const noteData = {
   // 获取笔记列表
-  getNotes: async (userId: string) => {
+  getNotes: async (userId: string, offset: number) => {
     try {
       const [rows] = await pool.execute(
-        'SELECT * FROM notes WHERE user_id = ? ORDER BY updated_at DESC',
-        [userId]
+        'SELECT id,title,LEFT(content,100) AS content,created_at,updated_at FROM notes WHERE user_id = ? ORDER BY updated_at DESC limit 30 offset ?',
+        [userId,offset*30]
       )
       return rows as any[]
     } catch (error) {

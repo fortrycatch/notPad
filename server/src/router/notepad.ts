@@ -4,8 +4,8 @@ import { TRPCError } from '@trpc/server';
 import z from 'zod';
 export default router({
     // 笔记相关API
-    getNotes: needAuth.query(async ({ ctx }) => {
-        return await noteData.getNotes('admin'); // 暂时使用admin作为用户ID
+    getNotes: needAuth.input(z.number()).query(async ({ input,ctx }) => {
+        return await noteData.getNotes('admin',input); // 暂时使用admin作为用户ID
     }),
     
     getNoteById: needAuth.input(z.object({

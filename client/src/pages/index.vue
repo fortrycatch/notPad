@@ -21,7 +21,7 @@
                 开始使用
               </v-btn>
               <v-btn
-                variant="outlined"
+                
                 size="large"
                 prepend-icon="mdi-information"
                 @click="goToAbout"

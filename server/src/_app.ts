@@ -1,2 +1,2 @@
-import type { AppRouter } from "./router.js";
+import type { AppRouter } from "./router/index.js";
 export type { AppRouter };

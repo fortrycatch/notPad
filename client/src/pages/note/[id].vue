@@ -208,7 +208,7 @@ const editForm = ref({
 const fetchNote = async () => {
   try {
     const id = route.params.id as string
-    const result = await server.getNoteById.query({ id })
+    const result = await server.notepad.getNoteById.query({ id })
     note.value = result
     editForm.value = {
       title: result.title,
@@ -233,7 +233,7 @@ const deleteNote = async () => {
   
   try {
     deleting.value = true
-    await server.deleteNote.mutate({ id: note.value.id })
+    await server.notepad.deleteNote.mutate({ id: note.value.id })
     router.push('/notes')
   } catch (error) {
     console.error('删除笔记失败:', error)
@@ -261,7 +261,7 @@ const saveChanges = async () => {
 
   try {
     saving.value = true
-    const updatedNote = await server.updateNote.mutate({
+    const updatedNote = await server.notepad.updateNote.mutate({
       id: note.value.id,
       title: editForm.value.title,
       content: editForm.value.content

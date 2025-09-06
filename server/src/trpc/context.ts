@@ -1,5 +1,5 @@
 import type { CreateHTTPContextOptions } from "@trpc/server/adapters/standalone";
-import { auth } from './solt.js';
+import { auth } from '../solt.js';
 async function createContext(opts: CreateHTTPContextOptions) {
     const authContext = await auth(opts);
     return {

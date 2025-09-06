@@ -219,7 +219,7 @@ const showDialog = computed(() => showCreateDialog.value || showEditDialog.value
 // 获取笔记列表
 const fetchNotes = async () => {
   try {
-    const result = await trpc.getNotes.query()
+    const result = await trpc.notepad.getNotes.query()
     notes.value = result
   } catch (error) {
     console.error('获取笔记列表失败:', error)
@@ -251,7 +251,7 @@ const deleteNote = (id: string) => {
 const confirmDelete = async () => {
   try {
     deleting.value = true
-    await trpc.deleteNote.mutate({ id: deletingNoteId.value })
+    await trpc.notepad.deleteNote.mutate({ id: deletingNoteId.value })
     await fetchNotes()
     showDeleteDialog.value = false
   } catch (error) {
@@ -270,13 +270,13 @@ const saveNote = async () => {
   try {
     saving.value = true
     if (showEditDialog.value) {
-      await trpc.updateNote.mutate({
+      await trpc.notepad.updateNote.mutate({
         id: editingNoteId.value,
         title: noteForm.value.title,
         content: noteForm.value.content
       })
     } else {
-      await trpc.createNote.mutate({
+      await trpc.notepad.createNote.mutate({
         title: noteForm.value.title,
         content: noteForm.value.content
       })

@@ -22,7 +22,7 @@ const username = ref('');
 const password = ref('');
 import { server } from '../../server';
 const login = async () => {
-    const res = await server.login.mutate({
+    const res = await server.auth.login.mutate({
         username: username.value,
         password: password.value
     });

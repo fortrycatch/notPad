@@ -154,7 +154,11 @@ const showDialog = computed(() => showCreateDialog.value || showEditDialog.value
 const fetchNotes = async () => {
   try {
     const result = await trpc.notepad.getNotes.query(page.value)
-    store.notes.push(...result)
+    if (page.value == 0) {
+      store.notes = result
+    } else {
+      store.notes.push(...result)
+    }
     page.value++
   } catch (error) {
     console.error('获取笔记列表失败:', error)

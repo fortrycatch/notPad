@@ -46,8 +46,24 @@ export async function initDatabase() {
         INDEX idx_user_id (user_id),
         INDEX idx_created_at (created_at),
         INDEX idx_updated_at (updated_at)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+    
+    // 再创建images表
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS images (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(255) NOT NULL,
+        url VARCHAR(255) NOT NULL,
+        size INT NOT NULL,
+        user_id VARCHAR(35) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        remark TEXT NOT NULL,
+        INDEX idx_user_id (user_id),
+        INDEX idx_created_at (created_at),
+        INDEX idx_name (name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
     
     connection.release()
     console.log('数据库初始化完成')

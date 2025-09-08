@@ -86,3 +86,36 @@ export const noteData = {
     }
   }
 }
+
+export const imageData = {
+  getImageList: async (userId: string, offset: number, sort: 'time' | 'time_desc' | 'name' = 'time_desc', search: string = '') => {
+    let sort_sql = ''
+    switch(sort){
+      case 'time':
+        sort_sql = 'created_at'
+        break
+      case 'time_desc':
+        sort_sql = 'created_at DESC'
+        break
+      case 'name':
+        sort_sql = 'name'
+        break
+    }
+    let search_sql = ''
+    if(search && search != ''){
+      search_sql = `AND name LIKE '%${search}%'`
+    }
+    const [rows] = await pool.execute(
+      `SELECT * FROM images WHERE user_id = ? ${search_sql} ORDER BY ${sort_sql} limit 30 offset ?`,
+      [userId, offset*30]
+    )
+    return rows as any[]
+  },
+  addImage: async (name: string, url: string,size:number, userId: string, remark: string) => {
+    const [result] = await pool.execute(
+      'INSERT INTO images (name, url, size, user_id, remark) VALUES (?, ?, ?, ?, ?)',
+      [name, url, size, userId, remark]
+    )
+    return result as any
+  }
+}

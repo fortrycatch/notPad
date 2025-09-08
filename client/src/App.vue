@@ -26,7 +26,7 @@ onMounted(async () => {
 
 <template>
   
-    <Normal title="Normal App" >
+    <Normal title="LoliCloud" >
 		<template #bar>
 			<v-btn icon="mdi-account-card"></v-btn>
 		</template>

@@ -19,7 +19,16 @@ const vuetify = createVuetify({
 	directives,
 	icons: {
 		defaultSet: 'mdi',
-	  },
+	},
+	theme: {
+		themes: {
+			light: {
+				colors: {
+					primary: '#ff9edd',
+				}
+			}
+		}
+	}
 });
 
 import routes from "~pages";

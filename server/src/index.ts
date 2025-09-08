@@ -12,7 +12,14 @@ const app = express();
 app.use(cors());
 app.use('/trpc', trpcExpress.createExpressMiddleware({ router: appRouter, createContext }));
 app.use(express.static('public'));
-
+// 处理所有未匹配的路由，返回 index.html 用于客户端路由
+app.use((req, res, next) => {
+    // 跳过 API 路由和静态文件
+    if (req.path.startsWith('/trpc')) {
+        return next();
+    }
+    res.sendFile('public/index.html', { root: '.' });
+});
 app.listen(config.port, async () => {
     console.log(`Server is running on port ${config.port}`);
     

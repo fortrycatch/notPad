@@ -78,7 +78,7 @@ export async function initDatabase() {
 
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS tokens (
-        token VARCHAR(255) PRIMARY KEY,
+        token VARCHAR(64) PRIMARY KEY,
         user_id VARCHAR(36) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         used_at TIMESTAMP NULL DEFAULT NULL,

@@ -155,9 +155,11 @@ const login = async () => {
             password: password.value
         });
         if (res.success && res.token) {
-            useMainStore().authenticated = true;
-            useMainStore().token = res.token;
+            const mainStore = useMainStore();
+            mainStore.authenticated = true;
+            mainStore.token = res.token;
             localStorage.setItem("token", res.token);
+            mainStore.triggerRefresh(); // 触发刷新
             showSnackbar('登录成功', 'success');
             // 登录成功，可以关闭对话框或跳转
         } else {
@@ -216,9 +218,11 @@ const register = async () => {
             password: password.value
         });
         if (res.success && 'token' in res && res.token) {
-            useMainStore().authenticated = true;
-            useMainStore().token = res.token;
+            const mainStore = useMainStore();
+            mainStore.authenticated = true;
+            mainStore.token = res.token;
             localStorage.setItem("token", res.token);
+            mainStore.triggerRefresh(); // 触发刷新
             const message = 'message' in res ? res.message : '注册成功';
             showSnackbar(message, 'success');
             // 注册成功后自动登录，清空表单

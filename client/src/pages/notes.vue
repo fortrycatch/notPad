@@ -1,72 +1,101 @@
 <template>
-  <v-row>
-    <v-col cols="12">
-      <div class="d-flex justify-space-between align-center mb-6">
-        <h1 class="text-h4 font-weight-bold">我的笔记</h1>
-        <v-btn color="primary" prepend-icon="mdi-plus" @click="showCreateDialog = true" size="large">
-          新建笔记
+  <div class="notes-container" ref="containerRef">
+    <v-row>
+      <v-col cols="12">
+        <div class="d-flex justify-space-between align-center mb-6">
+          <h1 class="text-h4 font-weight-bold">我的笔记</h1>
+          <v-btn color="primary" prepend-icon="mdi-plus" @click="showCreateDialog = true" size="large">
+            新建笔记
+          </v-btn>
+        </div>
+      </v-col>
+    </v-row>
+
+    <v-row v-if="store.notes.length > 0">
+      <v-col v-for="note in store.notes" :key="note.id" cols="12" sm="6" md="4" lg="3">
+        <v-card class="note-card" @click="viewNote(note.id)" hover elevation="2">
+          <v-card-title class="d-flex justify-space-between align-start">
+            <span class="text-truncate">{{ note.title }}</span>
+            <v-menu>
+              <template v-slot:activator="{ props }">
+                <v-btn icon="mdi-dots-vertical" variant="text" size="small" v-bind="props" @click.stop></v-btn>
+              </template>
+              <v-list>
+                <v-list-item @click="editNote(note)">
+                  <template v-slot:prepend>
+                    <v-icon>mdi-pencil</v-icon>
+                  </template>
+                  <v-list-item-title>编辑</v-list-item-title>
+                </v-list-item>
+                <v-list-item @click="deleteNote(note.id)" color="error">
+                  <template v-slot:prepend>
+                    <v-icon color="error">mdi-delete</v-icon>
+                  </template>
+                  <v-list-item-title>删除</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-menu>
+          </v-card-title>
+
+          <v-card-text>
+            <p class="text-body-2 text-truncate-2">
+              {{ truncateContent(note.content) }}
+            </p>
+          </v-card-text>
+
+          <v-card-actions>
+            <v-chip size="small" color="grey" class="text-caption">
+              {{ formatDate(note.updated_at) }}
+            </v-chip>
+          </v-card-actions>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <v-row v-else-if="!loading">
+      <v-col cols="12" class="text-center">
+        <v-card class="empty-state" elevation="0">
+          <v-card-text>
+            <v-icon size="64" color="grey-lighten-1" class="mb-4">
+              mdi-note-text-outline
+            </v-icon>
+            <h3 class="text-h6 mb-2">还没有笔记</h3>
+            <p class="text-body-2 text-medium-emphasis">
+              点击上方按钮创建你的第一篇笔记
+            </p>
+          </v-card-text>
+        </v-card>
+      </v-col>
+    </v-row>
+
+    <!-- 加载更多提示 -->
+    <v-row v-if="hasMore && store.notes.length > 0">
+      <v-col cols="12" class="text-center">
+        <v-progress-circular
+          v-if="loadingMore"
+          indeterminate
+          color="primary"
+          size="32"
+          class="mb-4"
+        ></v-progress-circular>
+        <v-btn
+          v-else
+          variant="text"
+          @click="loadMore"
+          class="load-more-btn"
+        >
+          加载更多
         </v-btn>
-      </div>
-    </v-col>
-  </v-row>
+      </v-col>
+    </v-row>
 
-  <v-row v-if="store.notes.length > 0">
-    <v-col v-for="note in store.notes" :key="note.id" cols="12" sm="6" md="4" lg="3">
-      <v-card class="note-card" @click="viewNote(note.id)" hover elevation="2">
-        <v-card-title class="d-flex justify-space-between align-start">
-          <span class="text-truncate">{{ note.title }}</span>
-          <v-menu>
-            <template v-slot:activator="{ props }">
-              <v-btn icon="mdi-dots-vertical" variant="text" size="small" v-bind="props" @click.stop></v-btn>
-            </template>
-            <v-list>
-              <v-list-item @click="editNote(note)">
-                <template v-slot:prepend>
-                  <v-icon>mdi-pencil</v-icon>
-                </template>
-                <v-list-item-title>编辑</v-list-item-title>
-              </v-list-item>
-              <v-list-item @click="deleteNote(note.id)" color="error">
-                <template v-slot:prepend>
-                  <v-icon color="error">mdi-delete</v-icon>
-                </template>
-                <v-list-item-title>删除</v-list-item-title>
-              </v-list-item>
-            </v-list>
-          </v-menu>
-        </v-card-title>
-
-        <v-card-text>
-          <p class="text-body-2 text-truncate-2">
-            {{ truncateContent(note.content) }}
-          </p>
-        </v-card-text>
-
-        <v-card-actions>
-          <v-chip size="small" color="grey" class="text-caption">
-            {{ formatDate(note.updated_at) }}
-          </v-chip>
-        </v-card-actions>
-      </v-card>
-    </v-col>
-    <v-btn @click="fetchNotes()">加载更多</v-btn>
-  </v-row>
-
-  <v-row v-else>
-    <v-col cols="12" class="text-center">
-      <v-card class="empty-state" elevation="0">
-        <v-card-text>
-          <v-icon size="64" color="grey-lighten-1" class="mb-4">
-            mdi-note-text-outline
-          </v-icon>
-          <h3 class="text-h6 mb-2">还没有笔记</h3>
-          <p class="text-body-2 text-medium-emphasis">
-            点击上方按钮创建你的第一篇笔记
-          </p>
-        </v-card-text>
-      </v-card>
-    </v-col>
-  </v-row>
+    <!-- 没有更多数据提示 -->
+    <v-row v-if="!hasMore && store.notes.length > 0">
+      <v-col cols="12" class="text-center">
+        <p class="text-body-2 text-medium-emphasis mt-4">没有更多笔记了</p>
+      </v-col>
+    </v-row>
+  </div>
 
   <!-- 创建/编辑笔记对话框 -->
   <v-dialog v-model="showDialog" max-width="600" persistent>
@@ -120,20 +149,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { trpc } from '../trpc'
 import noteStore from '../store/noteStore'
+import { useMainStore } from '../store/mainStore'
+
 const store = noteStore()
+const mainStore = useMainStore()
 const router = useRouter()
+const route = useRoute()
 const page = ref(0)
+const containerRef = ref<HTMLElement | null>(null)
+const loading = ref(false)
+const loadingMore = ref(false)
+const hasMore = ref(true)
+
 interface Note {
   id: string
   title: string
   content: string
-  created_at: string
-  updated_at: string
-  userId: string
+  created_at: string | Date
+  updated_at: string | Date
+  //?
 }
 
 const showCreateDialog = ref(false)
@@ -150,19 +188,83 @@ const noteForm = ref({
 
 const showDialog = computed(() => showCreateDialog.value || showEditDialog.value)
 
+// 重置并刷新笔记列表
+const refreshNotes = async () => {
+  page.value = 0
+  hasMore.value = true
+  store.notes = []
+  await fetchNotes()
+}
+
 // 获取笔记列表
-const fetchNotes = async () => {
+const fetchNotes = async (isLoadMore = false) => {
+  if (loading.value || loadingMore.value) return
+  
   try {
-    const result = await trpc.notepad.getNotes.query(page.value)
-    if (page.value == 0) {
-      store.notes = result
+    if (isLoadMore) {
+      loadingMore.value = true
     } else {
-      store.notes.push(...result)
+      loading.value = true
     }
-    page.value++
+    
+    const result = await trpc.notepad.getNotes.query(page.value) as Note[]
+    
+    if (result.length === 0) {
+      hasMore.value = false
+    } else {
+      if (page.value === 0) {
+        store.notes = result as any
+      } else {
+        store.notes.push(...(result as any))
+      }
+      // 如果返回的数据少于预期，说明没有更多了（后端每页返回30条）
+      if (result.length < 30) {
+        hasMore.value = false
+      }
+      page.value++
+    }
   } catch (error) {
     console.error('获取笔记列表失败:', error)
+    hasMore.value = false
+  } finally {
+    loading.value = false
+    loadingMore.value = false
   }
+}
+
+// 加载更多
+const loadMore = () => {
+  if (!loadingMore.value && hasMore.value) {
+    fetchNotes(true)
+  }
+}
+
+// 滚动监听 - 触底加载
+let scrollTimer: number | null = null
+const handleScroll = () => {
+  if (scrollTimer) {
+    clearTimeout(scrollTimer)
+  }
+  
+  scrollTimer = window.setTimeout(() => {
+    if (loadingMore.value || !hasMore.value) return
+    
+    const container = containerRef.value?.parentElement || window
+    const scrollTop = container === window 
+      ? window.scrollY || document.documentElement.scrollTop
+      : (container as HTMLElement).scrollTop
+    const scrollHeight = container === window
+      ? document.documentElement.scrollHeight
+      : (container as HTMLElement).scrollHeight
+    const clientHeight = container === window
+      ? window.innerHeight
+      : (container as HTMLElement).clientHeight
+    
+    // 距离底部100px时触发加载
+    if (scrollTop + clientHeight >= scrollHeight - 100) {
+      loadMore()
+    }
+  }, 200) // 防抖200ms
 }
 
 // 查看笔记详情
@@ -191,7 +293,7 @@ const confirmDelete = async () => {
   try {
     deleting.value = true
     await trpc.notepad.deleteNote.mutate({ id: deletingNoteId.value })
-    await fetchNotes()
+    await refreshNotes() // 删除后刷新列表
     showDeleteDialog.value = false
   } catch (error) {
     console.error('删除笔记失败:', error)
@@ -222,7 +324,7 @@ const saveNote = async () => {
     }
 
     closeDialog()
-    await fetchNotes()
+    await refreshNotes() // 保存后刷新列表并重置分页
   } catch (error) {
     console.error('保存笔记失败:', error)
   } finally {
@@ -244,12 +346,34 @@ const truncateContent = (content: string) => {
 }
 
 // 格式化日期
-const formatDate = (dateString: string) => {
-  return new Date(dateString).toLocaleDateString('zh-CN')
+const formatDate = (dateString: string | Date) => {
+  const date = typeof dateString === 'string' ? new Date(dateString) : dateString
+  return date.toLocaleDateString('zh-CN')
 }
+
+// 监听登录状态和刷新触发
+watch(
+  () => [mainStore.authenticated, mainStore.refreshTrigger, route.path],
+  ([authenticated, , path]) => {
+    if (authenticated && path === '/notes') {
+      refreshNotes()
+    }
+  },
+  { immediate: false }
+)
 
 onMounted(() => {
   fetchNotes()
+  // 添加滚动监听
+  window.addEventListener('scroll', handleScroll, { passive: true })
+})
+
+onUnmounted(() => {
+  // 移除滚动监听
+  window.removeEventListener('scroll', handleScroll)
+  if (scrollTimer) {
+    clearTimeout(scrollTimer)
+  }
 })
 </script>
 
@@ -275,6 +399,7 @@ onMounted(() => {
 .text-truncate-2 {
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   line-height: 1.4;
@@ -282,5 +407,13 @@ onMounted(() => {
 
 .empty-state {
   padding: 60px 20px;
+}
+
+.notes-container {
+  min-height: 100%;
+}
+
+.load-more-btn {
+  margin: 20px 0;
 }
 </style>

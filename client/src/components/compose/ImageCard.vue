@@ -38,6 +38,13 @@
                 @click.stop="previewImage"
                 title="预览"
             ></v-btn>
+            <v-btn
+                size="x-small"
+                variant="text"
+                icon="mdi-tune"
+                @click.stop="showOssConfig = true"
+                title="图片处理"
+            ></v-btn>
             <v-spacer></v-spacer>
         </div>
     </v-card>
@@ -71,21 +78,37 @@
                 <v-btn @click="copyImageMarkDown" prepend-icon="mdi-content-copy">
                     markdown
                 </v-btn>
+                <v-btn 
+                    @click="showOssConfig = true" 
+                    prepend-icon="mdi-tune"
+                    title="图片处理"
+                >
+                    图片处理
+                </v-btn>
                 <v-spacer></v-spacer>
                 <v-btn @click="showPreview = false">关闭</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
+
+    <!-- OSS 图片处理配置组件 -->
+    <OssProcessDialog
+        v-model="showOssConfig"
+        :image-url="imageUrl"
+        :image-name="getImageName(image.name)"
+    />
 </template>
 
 <script lang="ts" setup>
 import { ref } from 'vue'
+import OssProcessDialog from './OssProcessDialog.vue'
 
 const props = defineProps<{
     image: any
 }>()
 const imageUrl = 'https://monika.jkloli.net/' + props.image.url
 const showPreview = ref(false)
+const showOssConfig = ref(false)
 
 // 获取图片名称（去掉路径前缀）
 const getImageName = (fullName: string) => {
@@ -171,10 +194,11 @@ const copyImageMarkDown = () => {
 }
 
 .image-info {
-    >* {
-        margin-right: 5px;
-    }
     line-height: 1.2;
+}
+
+.image-info > * {
+    margin-right: 5px;
 }
 
 .image-info span {

@@ -14,15 +14,15 @@ export const aliOss = new OSS({
 export async function test() {
     return await aliOss.list()
 }
-export async function list(name: string) {
+export async function list(userId: string) {
     const res = await aliOss.list({
-        prefix: path + '/' + generateUserCode(name),
+        prefix: path + '/' + generateUserCode(userId),
     })
     // console.log(res)
     return res.objects
 }
-export async function getUploadUrl(filename: string, type: string) {
-    filename = path + '/' + generateUserCode('admin') + "-" + Date.now() + "-" + getUUID() + filename
+export async function getUploadUrl(userId: string, filename: string, type: string) {
+    filename = path + '/' + generateUserCode(userId) + "-" + Date.now() + "-" + getUUID() + filename
     const url = await aliOss.signatureUrlV4('PUT', 3600, {
         headers: {
             'content-type': type

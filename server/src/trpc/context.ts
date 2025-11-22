@@ -2,8 +2,16 @@ import type { CreateHTTPContextOptions } from "@trpc/server/adapters/standalone"
 import { auth } from '../solt.js';
 async function createContext(opts: CreateHTTPContextOptions) {
     const authContext = await auth(opts);
-    return {
-        "authenticated": authContext
+    if(!authContext.ok){
+        return {
+            "authenticated": false,
+            "user_id": null
+        }
+    }else{
+        return {
+            "authenticated": authContext.ok,
+            "user_id": authContext.user_id
+        }
     }
 }
 

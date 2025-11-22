@@ -40,7 +40,7 @@ export async function initDatabase() {
         id VARCHAR(36) PRIMARY KEY,
         title VARCHAR(255) NOT NULL,
         content TEXT NOT NULL,
-        user_id VARCHAR(100) NOT NULL,
+        user_id VARCHAR(36) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_user_id (user_id),
@@ -56,7 +56,7 @@ export async function initDatabase() {
         name VARCHAR(255) NOT NULL,
         url VARCHAR(255) NOT NULL,
         size INT NOT NULL,
-        user_id VARCHAR(35) NOT NULL,
+        user_id VARCHAR(36) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         remark TEXT NOT NULL,
         INDEX idx_user_id (user_id),
@@ -64,6 +64,27 @@ export async function initDatabase() {
         INDEX idx_name (name)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS users (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        email VARCHAR(255) NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `)
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS tokens (
+        token VARCHAR(255) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        used_at TIMESTAMP NULL DEFAULT NULL,
+        INDEX idx_user_id (user_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `)
     
     connection.release()
     console.log('数据库初始化完成')

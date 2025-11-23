@@ -135,4 +135,65 @@ export default router({
             return false;
         }
     }),
+    getProfile: needAuth.query(async ({ ctx }) => {
+        const user = await userData.getUserById(ctx.user_id!);
+        if (!user) throw new Error('用户不存在');
+        return {
+            id: user.id,
+            name: user.name,
+            email: user.email
+        };
+    }),
+    updateProfile: needAuth.input(z.object({
+        name: z.string().min(1, '昵称不能为空'),
+        email: z.string().email('邮箱格式不正确'),
+        password: z.string().optional()
+    })).mutation(async ({ ctx, input }) => {
+        const user = await userData.getUserById(ctx.user_id!);
+        if (!user) throw new Error('用户不存在');
+
+        let newPassword = user.password;
+        if (input.password && input.password.length > 0) {
+            if (input.password.length < 6) {
+                 throw new Error('密码长度至少6位');
+            }
+            newPassword = crypto.createHash('sha256').update(input.password).update("yuanshen").digest('hex');
+        }
+
+        const updatedUser = await userData.updateUser(
+            user.id,
+            input.name,
+            input.email,
+            newPassword
+        );
+        
+        return {
+            success: true,
+            user: {
+                id: updatedUser?.id,
+                name: updatedUser?.name,
+                email: updatedUser?.email
+            }
+        };
+    }),
+    getTokens: needAuth.query(async ({ ctx }) => {
+        const tokens = await tokenData.getTokenByUserId(ctx.user_id!);
+        return tokens ? tokens.map(t => ({
+            token: t.token,
+            created_at: t.created_at,
+            used_at: t.used_at
+        })) : [];
+    }),
+    revokeToken: needAuth.input(z.object({
+        tokenHash: z.string()
+    })).mutation(async ({ ctx, input }) => {
+        const tokens = await tokenData.getTokenByUserId(ctx.user_id!);
+        const targetToken = tokens?.find(t => t.token === input.tokenHash);
+        
+        if (!targetToken) {
+            throw new Error('Token不存在或无权操作');
+        }
+        
+        return await tokenData.deleteTokenByHash(input.tokenHash);
+    }),
 })

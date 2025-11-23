@@ -256,6 +256,18 @@ export const tokenData = {
       throw error
     }
   },
+  deleteTokenByHash: async (tokenHash: string): Promise<boolean> => {
+    try {
+      const [result] = await pool.execute<ResultSetHeader>(
+        'DELETE FROM tokens WHERE token = ?',
+        [tokenHash]
+      )
+      return result.affectedRows > 0
+    } catch (error) {
+      console.error('删除token失败:', error)
+      throw error
+    }
+  },
   getTokenByUserId: async (user_id: string): Promise<Token[] | null> => {
     try {
       const [rows] = await pool.execute<Token[]>(

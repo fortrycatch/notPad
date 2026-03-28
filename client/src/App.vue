@@ -35,12 +35,18 @@ const applyPrimaryColor = (color: string) => {
 watch(() => mainStore.primaryColor, applyPrimaryColor, { immediate: true });
 
 onMounted(async () => {
-	const result = await server.auth.verifyToken.query(mainStore.token);
-	if(!result.ok){
+	try {
+		const result = await server.auth.verifyToken.query(mainStore.token);
+		if (!result.ok) {
+			mainStore.authenticated = false;
+		} else {
+			mainStore.authenticated = true;
+			mainStore.applySettings(result.settings);
+		}
+	} catch {
 		mainStore.authenticated = false;
-	}else{
-		mainStore.authenticated = true;
-		mainStore.applySettings(result.settings);
+	} finally {
+		mainStore.authReady = true;
 	}
 });
 </script>

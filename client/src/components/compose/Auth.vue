@@ -94,8 +94,19 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useRoute } from 'vue-router';
 import { useMainStore } from '../../store/mainStore';
 import { server } from '../../server';
+
+const route = useRoute();
+
+const reloadIfNotHome = () => {
+    if (route.path !== '/') {
+        window.location.reload();
+        return true;
+    }
+    return false;
+};
 
 const isLogin = ref(true);
 const username = ref('');
@@ -160,9 +171,11 @@ const login = async () => {
             mainStore.authenticated = true;
             mainStore.token = res.token;
             localStorage.setItem("token", res.token);
-            mainStore.triggerRefresh(); // 触发刷新
+            if ('settings' in res && res.settings) {
+                mainStore.applySettings(res.settings as Record<string, string>);
+            }
             showSnackbar('登录成功', 'success');
-            // 登录成功，可以关闭对话框或跳转
+            if (reloadIfNotHome()) return;
         } else {
             const message = 'message' in res ? res.message : '登录失败';
             showSnackbar(message, 'error');
@@ -223,10 +236,12 @@ const register = async () => {
             mainStore.authenticated = true;
             mainStore.token = res.token;
             localStorage.setItem("token", res.token);
-            mainStore.triggerRefresh(); // 触发刷新
+            if ('settings' in res && res.settings) {
+                mainStore.applySettings(res.settings as Record<string, string>);
+            }
+            if (reloadIfNotHome()) return;
             const message = 'message' in res ? res.message : '注册成功';
             showSnackbar(message, 'success');
-            // 注册成功后自动登录，清空表单
             switchMode();
         } else {
             const message = 'message' in res ? res.message : '注册失败';
@@ -260,8 +275,8 @@ const switchMode = () => {
     left: 0;
     width: 100%;
     height: 100%;
+    z-index: 9999;
     background-color: rgba(0, 0, 0, 0.731);
-    /* z-index: 1000; */
     display: flex;
     /* flex-direction: column; */
     align-items: center;

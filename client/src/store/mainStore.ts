@@ -13,6 +13,8 @@ function loadCachedSettings(): Record<string, string> {
 export const useMainStore = defineStore("main", {
     state: () => ({
         authenticated: true,
+        /** becomes true after App.vue finishes verifyToken (success or fail) */
+        authReady: false,
         token: localStorage.getItem("token") || "",
         darkMode: localStorage.getItem("darkMode") !== "false",
         refreshTrigger: 0,

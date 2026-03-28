@@ -22,7 +22,17 @@
       </div>
     </div>
 
-    <template v-if="loading && items.length === 0">
+    <template v-if="!authReady">
+      <div class="timeline-skeleton">
+        <v-skeleton-loader v-for="i in 5" :key="i" type="list-item-two-line" class="skeleton-item" />
+      </div>
+    </template>
+
+    <template v-else-if="!authenticated">
+      <div class="d-none" aria-hidden="true" />
+    </template>
+
+    <template v-else-if="loading && items.length === 0">
       <div class="timeline-skeleton">
         <v-skeleton-loader v-for="i in 5" :key="i" type="list-item-two-line" class="skeleton-item" />
       </div>
@@ -156,8 +166,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
+import { useMainStore } from '../store/mainStore'
 import { server } from '../server'
 import ImagePreviewDialog from '../components/compose/ImagePreviewDialog.vue'
 import FileDownloadDialog from '../components/compose/FileDownloadDialog.vue'
@@ -185,6 +197,9 @@ const imageHost = 'https://monika.jkloli.net/'
 const PAGE_SIZE = 30
 
 const router = useRouter()
+const mainStore = useMainStore()
+const { authenticated, authReady } = storeToRefs(mainStore)
+
 const items = ref<TimelineItem[]>([])
 const page = ref(0)
 const loading = ref(false)
@@ -293,6 +308,7 @@ const loadInitial = async () => {
 }
 
 const loadMore = async () => {
+  if (!authenticated.value || !authReady.value) return
   if (loadingMore.value || !hasMore.value) return
 
   loadingMore.value = true
@@ -308,6 +324,7 @@ const loadMore = async () => {
 }
 
 const refresh = async () => {
+  if (!authenticated.value || !authReady.value) return
   refreshing.value = true
   await loadInitial()
   refreshing.value = false
@@ -395,6 +412,7 @@ const handleScroll = () => {
   if (scrollTimer) window.clearTimeout(scrollTimer)
 
   scrollTimer = window.setTimeout(() => {
+    if (!authenticated.value || !authReady.value) return
     if (loading.value || loadingMore.value || !hasMore.value) return
 
     const scrollTop = window.scrollY || document.documentElement.scrollTop
@@ -407,8 +425,24 @@ const handleScroll = () => {
   }, 150)
 }
 
+watch(
+  () => [authenticated.value, authReady.value] as const,
+  ([auth, ready]) => {
+    if (!ready) return
+    if (!auth) {
+      items.value = []
+      page.value = 0
+      hasMore.value = true
+      loading.value = false
+      loadingMore.value = false
+      return
+    }
+    void loadInitial()
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
-  void loadInitial()
   window.addEventListener('scroll', handleScroll, { passive: true })
 })
 

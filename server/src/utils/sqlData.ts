@@ -944,24 +944,23 @@ const TIMELINE_PAGE_SIZE = 30
 
 export const timelineData = {
   getTimeline: async (userId: string, offset: number): Promise<TimelineItem[]> => {
-    const CI = 'COLLATE utf8mb4_unicode_ci'
-    const nullSubtype = 'CAST(NULL AS CHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci)'
-    const nullRefId = 'CAST(NULL AS CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci)'
+    const C = 'COLLATE utf8mb4_unicode_ci'
+    const cap = offset * TIMELINE_PAGE_SIZE + TIMELINE_PAGE_SIZE
     const [rows] = await pool.execute<TimelineItem[]>(
-      `SELECT 'note' ${CI} AS type, id, title AS name, LEFT(content, 100) AS summary, NULL AS url, 0 AS size, created_at, ${nullSubtype} AS bookmark_subtype, ${nullRefId} AS ref_id
-       FROM notes WHERE user_id = ?
+      `(SELECT 'note' ${C} AS type, id ${C} AS id, title ${C} AS name, LEFT(content, 100) ${C} AS summary, NULL AS url, 0 AS size, created_at, NULL AS bookmark_subtype, NULL AS ref_id
+        FROM notes WHERE user_id = ? ORDER BY created_at DESC LIMIT ${cap})
        UNION ALL
-       SELECT 'image' ${CI}, CAST(id AS CHAR) ${CI}, name, '' ${CI} AS summary, url, size, created_at, ${nullSubtype}, ${nullRefId}
-       FROM images WHERE user_id = ?
+       (SELECT 'image' ${C} AS type, CAST(id AS CHAR) ${C} AS id, name ${C} AS name, '' ${C} AS summary, url ${C} AS url, size, created_at, NULL AS bookmark_subtype, NULL AS ref_id
+        FROM images WHERE user_id = ? ORDER BY created_at DESC LIMIT ${cap})
        UNION ALL
-       SELECT 'file' ${CI}, CAST(id AS CHAR) ${CI}, name, mime_type AS summary, oss_key AS url, size, created_at, ${nullSubtype}, ${nullRefId}
-       FROM drive_files WHERE user_id = ?
+       (SELECT 'file' ${C} AS type, CAST(id AS CHAR) ${C} AS id, name ${C} AS name, mime_type ${C} AS summary, oss_key ${C} AS url, size, created_at, NULL AS bookmark_subtype, NULL AS ref_id
+        FROM drive_files WHERE user_id = ? ORDER BY created_at DESC LIMIT ${cap})
        UNION ALL
-       SELECT 'bookmark' ${CI}, CAST(b.id AS CHAR) ${CI}, b.title AS name, LEFT(COALESCE(b.description, ''), 100) AS summary, b.url, 0 AS size, b.created_at, b.type ${CI}, b.ref_id
-       FROM bookmarks b WHERE b.user_id = ?
+       (SELECT 'bookmark' ${C} AS type, CAST(b.id AS CHAR) ${C} AS id, b.title ${C} AS name, LEFT(COALESCE(b.description, ''), 100) ${C} AS summary, b.url ${C} AS url, 0 AS size, b.created_at, b.type ${C} AS bookmark_subtype, b.ref_id ${C} AS ref_id
+        FROM bookmarks b WHERE b.user_id = ? ORDER BY created_at DESC LIMIT ${cap})
        ORDER BY created_at DESC
-       LIMIT ${TIMELINE_PAGE_SIZE} OFFSET ?`,
-      [userId, userId, userId, userId, offset * TIMELINE_PAGE_SIZE]
+       LIMIT ${TIMELINE_PAGE_SIZE} OFFSET ${offset * TIMELINE_PAGE_SIZE}`,
+      [userId, userId, userId, userId]
     )
     return rows
   }

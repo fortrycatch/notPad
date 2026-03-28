@@ -166,7 +166,7 @@ export async function initDatabase() {
         title VARCHAR(255) NOT NULL,
         description TEXT NOT NULL DEFAULT '',
         url VARCHAR(1024) NOT NULL DEFAULT '',
-        ref_id VARCHAR(255) NULL,
+        ref_id VARCHAR(128) NULL,
         user_id VARCHAR(36) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uk_user_ref (user_id, type, ref_id),

@@ -10,16 +10,6 @@
           <div class="page-subtitle">记录你的每一次创造</div>
         </div> -->
       </div>
-      <div class="toolbar-actions desktop-toolbar">
-        <v-btn
-          variant="tonal"
-          prepend-icon="mdi-refresh"
-          :loading="refreshing"
-          @click="refresh"
-        >
-          刷新
-        </v-btn>
-      </div>
     </div>
 
     <template v-if="!authReady">
@@ -141,12 +131,6 @@
     </template>
   </v-container>
 
-  <div class="mobile-toolbar">
-    <v-btn variant="text" prepend-icon="mdi-refresh" :loading="refreshing" @click="refresh">
-      刷新
-    </v-btn>
-  </div>
-
   <ImagePreviewDialog
     v-model="showImagePreview"
     :image-url="previewImageUrl"
@@ -204,7 +188,6 @@ const items = ref<TimelineItem[]>([])
 const page = ref(0)
 const loading = ref(false)
 const loadingMore = ref(false)
-const refreshing = ref(false)
 const hasMore = ref(true)
 
 const groupedItems = computed<TimelineGroup[]>(() => {
@@ -321,13 +304,6 @@ const loadMore = async () => {
     page.value++
   }
   loadingMore.value = false
-}
-
-const refresh = async () => {
-  if (!authenticated.value || !authReady.value) return
-  refreshing.value = true
-  await loadInitial()
-  refreshing.value = false
 }
 
 const showImagePreview = ref(false)
@@ -687,23 +663,9 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.mobile-toolbar {
-  display: none;
-}
-
 @media (max-width: 760px) {
-  .desktop-toolbar {
-    display: none;
-  }
-
   .timeline-page {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 48px);
   }
 
   .page-title {
@@ -720,28 +682,6 @@ onUnmounted(() => {
 
   .entry-thumb {
     max-width: 100%;
-  }
-
-  .mobile-toolbar {
-    position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 30;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
-    border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-    background: rgba(var(--v-theme-surface), 0.96);
-    backdrop-filter: blur(12px);
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
-  }
-
-  .mobile-toolbar > * {
-    flex: 1 1 auto;
-    min-width: 0;
   }
 }
 </style>

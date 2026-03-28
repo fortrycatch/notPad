@@ -36,18 +36,22 @@
           <v-btn
             v-if="bookmark.url"
             variant="text"
+            density="comfortable"
             prepend-icon="mdi-open-in-new"
+            title="打开链接"
             @click="openExternalUrl(bookmark.url)"
           >
-            打开链接
+            <span class="bookmark-topbar-btn-label">打开链接</span>
           </v-btn>
           <v-btn
             variant="text"
+            density="comfortable"
             prepend-icon="mdi-delete"
             color="error"
+            title="删除"
             @click="showDeleteDialog = true"
           >
-            删除
+            <span class="bookmark-topbar-btn-label">删除</span>
           </v-btn>
         </div>
       </header>
@@ -476,9 +480,40 @@ onMounted(() => {
     padding: 16px 0 32px;
   }
 
-  .bookmark-topbar-actions > * {
-    flex: 1 1 auto;
+  .bookmark-topbar {
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  .bookmark-topbar-main {
+    flex: 1 1 0;
     min-width: 0;
+  }
+
+  .bookmark-topbar-time {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .bookmark-topbar-time span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .bookmark-topbar-actions {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    gap: 0;
+  }
+
+  .bookmark-topbar-actions :deep(.v-btn) {
+    min-width: 40px;
+    padding-inline: 4px;
+  }
+
+  .bookmark-topbar-btn-label {
+    display: none;
   }
 }
 </style>

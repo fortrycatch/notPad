@@ -34,15 +34,6 @@
 
         <div class="note-topbar-actions">
           <template v-if="!isEditing">
-            <v-btn
-              class="note-mobile-toc-trigger"
-              variant="text"
-              prepend-icon="mdi-format-list-bulleted"
-              :disabled="tocItems.length === 0"
-              @click="showMobileToc = true"
-            >
-              目录
-            </v-btn>
             <v-menu :close-on-content-click="false">
               <template #activator="{ props: tagMenuProps }">
                 <v-btn variant="text" prepend-icon="mdi-tag-outline" v-bind="tagMenuProps">
@@ -80,7 +71,7 @@
             </v-btn>
             <v-menu>
               <template #activator="{ props }">
-                <v-btn class="note-more-btn" icon="mdi-dots-horizontal" variant="text" v-bind="props" />
+                <v-btn icon="mdi-dots-horizontal" variant="text" v-bind="props" />
               </template>
               <v-list>
                 <v-list-item @click="deleteNote" color="error">
@@ -94,6 +85,63 @@
           </template>
         </div>
       </header>
+
+      <div v-if="!isEditing" class="note-mobile-toolbar">
+        <v-btn
+          icon="mdi-format-list-bulleted"
+          variant="text"
+          :disabled="tocItems.length === 0"
+          @click="showMobileToc = true"
+        />
+        <v-menu :close-on-content-click="false">
+          <template #activator="{ props: tagMenuProps }">
+            <v-btn icon="mdi-tag-outline" variant="text" v-bind="tagMenuProps" />
+          </template>
+          <v-list density="compact" min-width="200">
+            <v-list-item
+              v-for="tag in allTags"
+              :key="tag.id"
+              @click="toggleTag(tag)"
+            >
+              <template #prepend>
+                <v-icon :color="isTagged(tag.id) ? 'primary' : undefined">
+                  {{ isTagged(tag.id) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                </v-icon>
+              </template>
+              <v-list-item-title>{{ tag.name }}</v-list-item-title>
+            </v-list-item>
+            <v-list-item v-if="allTags.length === 0" disabled>
+              <v-list-item-title class="text-medium-emphasis">暂无标签</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
+        <v-btn
+          :icon="noteIsBookmarked ? 'mdi-bookmark' : 'mdi-bookmark-outline'"
+          variant="text"
+          :color="noteIsBookmarked ? 'primary' : undefined"
+          @click="showBookmarkDialog = true"
+        />
+        <v-btn
+          icon="mdi-pencil"
+          variant="text"
+          color="primary"
+          @click="enterEditMode"
+          :disabled="saving"
+        />
+        <v-menu>
+          <template #activator="{ props }">
+            <v-btn icon="mdi-dots-horizontal" variant="text" v-bind="props" />
+          </template>
+          <v-list>
+            <v-list-item @click="deleteNote" color="error">
+              <template #prepend>
+                <v-icon color="error">mdi-delete</v-icon>
+              </template>
+              <v-list-item-title>删除笔记</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
+      </div>
 
       <div v-if="!isEditing" class="note-layout">
         <aside class="note-sidebar">
@@ -999,7 +1047,7 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
 }
 
-.note-mobile-toc-trigger {
+.note-mobile-toolbar {
   display: none;
 }
 
@@ -1300,13 +1348,8 @@ onBeforeUnmount(() => {
     padding: 12px 0;
   }
 
-  .note-topbar-time,
-  .note-topbar-actions {
+  .note-topbar-time {
     width: 100%;
-  }
-
-  .note-mobile-toc-trigger {
-    display: inline-flex;
   }
 
   .note-topbar-meta {
@@ -1314,19 +1357,23 @@ onBeforeUnmount(() => {
   }
 
   .note-topbar-actions {
+    display: none;
+  }
+
+  .note-mobile-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     z-index: 30;
-    width: auto;
-    justify-content: space-between;
-    padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
-    border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-    border-radius: 0;
+    padding: 6px 12px calc(env(safe-area-inset-bottom, 0px) + 6px);
+    border-top: 1px solid rgba(var(--v-theme-on-surface), 0.08);
     background: rgba(var(--v-theme-surface), 0.96);
     backdrop-filter: blur(12px);
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+    box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.08);
   }
 
   .note-sidebar {
@@ -1337,15 +1384,6 @@ onBeforeUnmount(() => {
   .note-markdown {
     padding-left: 0;
     padding-right: 0;
-  }
-
-  .note-topbar-actions > * {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .note-more-btn {
-    border-radius: 0 !important;
   }
 }
 

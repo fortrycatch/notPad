@@ -82,9 +82,23 @@ export async function initDatabase() {
         user_id VARCHAR(36) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         used_at TIMESTAMP NULL DEFAULT NULL,
+        user_agent VARCHAR(512) NULL DEFAULT NULL,
+        alias VARCHAR(128) NULL DEFAULT NULL,
         INDEX idx_user_id (user_id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `)
+
+    for (const sql of [
+      'ALTER TABLE tokens ADD COLUMN user_agent VARCHAR(512) NULL DEFAULT NULL',
+      'ALTER TABLE tokens ADD COLUMN alias VARCHAR(128) NULL DEFAULT NULL'
+    ]) {
+      try {
+        await connection.execute(sql)
+      } catch (e: unknown) {
+        const err = e as { code?: string; errno?: number }
+        if (err.code !== 'ER_DUP_FIELDNAME' && err.errno !== 1060) throw e
+      }
+    }
     
     connection.release()
     console.log('数据库初始化完成')

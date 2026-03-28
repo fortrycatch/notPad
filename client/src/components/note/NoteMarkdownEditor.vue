@@ -1,172 +1,148 @@
 <template>
-  <div class="note-detail-page" :class="{ 'is-editor-mode': isEditing }">
-    <div v-if="loading" class="note-state">
-      <v-progress-circular indeterminate color="primary" size="56" />
-      <p>正在加载笔记...</p>
-    </div>
-
-    <div v-else-if="error" class="note-state note-state-error">
-      <v-icon size="52" color="error">mdi-alert-circle</v-icon>
-      <h3>{{ error }}</h3>
-      <div class="note-state-actions">
-        <v-btn color="primary" prepend-icon="mdi-refresh" @click="fetchNote">重试</v-btn>
-        <v-btn variant="text" prepend-icon="mdi-arrow-left" @click="goBack">返回</v-btn>
+  <div class="note-editor-workspace">
+    <div class="note-editor-toolbar">
+      <div class="note-editor-toolbar__right">
+        <v-btn
+          class="note-editor-mobile-toc-trigger"
+          variant="text"
+          prepend-icon="mdi-format-list-bulleted"
+          :disabled="tocItems.length === 0"
+          @click="showMobileToc = true"
+        >
+          目录
+        </v-btn>
+        <v-btn
+          variant="text"
+          prepend-icon="mdi-paperclip"
+          @click="openResourcePicker('image')"
+        >
+          插入资源
+        </v-btn>
+        <v-btn-toggle
+          v-model="editorView"
+          mandatory
+          density="comfortable"
+          variant="text"
+          divided
+        >
+          <v-btn value="write">编辑</v-btn>
+          <v-btn value="preview">预览</v-btn>
+        </v-btn-toggle>
+        <v-btn
+          v-if="showCancel"
+          variant="text"
+          @click="emit('cancel')"
+          :disabled="saving || cancelDisabled"
+        >
+          取消
+        </v-btn>
+        <v-btn
+          color="primary"
+          prepend-icon="mdi-content-save"
+          @click="emit('save', { keepEditing: false })"
+          :loading="saving"
+          :disabled="saveDisabled"
+        >
+          {{ saveLabel }}
+        </v-btn>
       </div>
     </div>
 
-    <div v-else-if="note" class="note-shell">
-      <header class="note-topbar">
-        <div class="note-topbar-main">
-          <v-btn
-            icon="mdi-arrow-left"
-            variant="text"
-            density="comfortable"
-            @click="goBack"
-            title="返回"
-          />
-          <div class="note-topbar-meta">
-            <div class="note-topbar-time">
-              <span>创建于 {{ formatDate(note.created_at) }}</span>
-              <span>更新于 {{ formatDate(note.updated_at) }}</span>
-            </div>
-          </div>
-        </div>
+    <div class="note-editor-layout" :class="{ 'is-write-mode': editorView === 'write' }">
+      <aside class="note-editor-sidebar">
+        <div class="note-editor-sidebar__title">目录</div>
+        <v-divider class="note-editor-sidebar__divider" />
 
-        <div class="note-topbar-actions">
-          <template v-if="!isEditing">
-            <v-btn
-              class="note-mobile-toc-trigger"
-              variant="text"
-              prepend-icon="mdi-format-list-bulleted"
-              :disabled="tocItems.length === 0"
-              @click="showMobileToc = true"
-            >
-              目录
-            </v-btn>
-            <v-btn color="primary" prepend-icon="mdi-pencil" @click="enterEditMode" :disabled="saving">
-              编辑
-            </v-btn>
-            <v-menu>
-              <template #activator="{ props }">
-                <v-btn class="note-more-btn" icon="mdi-dots-horizontal" variant="text" v-bind="props" />
-              </template>
-              <v-list>
-                <v-list-item @click="deleteNote" color="error">
-                  <template #prepend>
-                    <v-icon color="error">mdi-delete</v-icon>
-                  </template>
-                  <v-list-item-title>删除笔记</v-list-item-title>
-                </v-list-item>
-              </v-list>
-            </v-menu>
-          </template>
-        </div>
-      </header>
-
-      <div v-if="!isEditing" class="note-layout">
-        <aside class="note-sidebar">
-          <div class="note-sidebar-title">目录</div>
-          <v-divider class="note-sidebar-divider" />
-
-          <div v-if="tocItems.length > 0" class="note-toc">
-            <button
-              v-for="item in tocItems"
-              :key="item.id"
-              type="button"
-              class="note-toc-item"
-              :class="{ 'is-active': activeHeadingId === item.id }"
-              :style="{ '--level': item.level }"
-              @click="scrollToHeading(item.id)"
-            >
-              {{ item.text }}
-            </button>
-          </div>
-
-          <div v-else class="note-toc-empty">无目录</div>
-        </aside>
-
-        <section class="note-main">
-          <div class="note-reader">
-            <div class="note-reader-header">
-              <h1 class="note-title">{{ note.title }}</h1>
-            </div>
-            <v-divider />
-
-            <article
-              ref="articleRef"
-              :key="`reader-${mainStore.darkMode ? 'dark' : 'light'}`"
-              class="note-markdown"
-              v-html="viewDocument.html"
-            />
-          </div>
-        </section>
-      </div>
-
-      <NoteMarkdownEditor
-        v-else
-        v-model="editForm"
-        :saving="saving"
-        :save-disabled="!canSave || !hasChanges"
-        @cancel="cancelEdit"
-        @save="saveNote"
-      />
-
-      <v-navigation-drawer
-        v-model="showMobileToc"
-        location="right"
-        temporary
-        width="300"
-        class="note-mobile-toc"
-      >
-        <div class="note-mobile-toc__header">
-          <div class="note-mobile-toc__title">目录</div>
-          <v-btn icon="mdi-close" variant="text" @click="showMobileToc = false" />
-        </div>
-        <v-divider />
-        <div v-if="tocItems.length > 0" class="note-mobile-toc__body">
+        <div v-if="tocItems.length > 0" class="note-editor-toc">
           <button
             v-for="item in tocItems"
             :key="item.id"
             type="button"
-            class="note-toc-item"
+            class="note-editor-toc__item"
             :class="{ 'is-active': activeHeadingId === item.id }"
             :style="{ '--level': item.level }"
-            @click="selectMobileTocItem(item.id)"
+            @click="scrollToHeading(item.id)"
           >
             {{ item.text }}
           </button>
         </div>
-        <div v-else class="note-mobile-toc__empty">无目录</div>
-      </v-navigation-drawer>
+
+        <div v-else class="note-editor-sidebar__empty">无目录</div>
+      </aside>
+
+      <section class="note-editor-main">
+        <div class="note-editor-card">
+          <div class="note-editor-card__header">
+            <input
+              :value="modelValue.title"
+              class="note-editor-title-input"
+              type="text"
+              :placeholder="titlePlaceholder"
+              :autofocus="autofocusTitle"
+              @input="updateTitle(($event.target as HTMLInputElement).value)"
+            />
+          </div>
+          <v-divider />
+
+          <div v-if="editorView === 'write'" class="note-editor-card__write">
+            <textarea
+              ref="noteEditorRef"
+              :value="modelValue.content"
+              class="note-editor-body"
+              :placeholder="contentPlaceholder"
+              spellcheck="false"
+              @input="handleContentInput"
+              @click="syncEditorSelection"
+              @focus="syncEditorSelection"
+              @keyup="syncEditorSelection"
+              @select="syncEditorSelection"
+            />
+          </div>
+
+          <article
+            v-else
+            ref="articleRef"
+            :key="`preview-${mainStore.darkMode ? 'dark' : 'light'}`"
+            class="note-markdown note-preview"
+            v-html="previewDocument.html"
+          />
+        </div>
+      </section>
     </div>
 
-    <v-dialog v-model="showDeleteDialog" max-width="400">
-      <v-card>
-        <v-card-title class="text-h6">
-          <v-icon color="error" class="mr-2">mdi-alert</v-icon>
-          确认删除
-        </v-card-title>
-        <v-card-text>
-          <p>确定要删除这篇笔记吗？</p>
-          <p class="text-medium-emphasis text-caption mt-2">此操作无法撤销，请谨慎操作。</p>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn @click="showDeleteDialog = false" :disabled="deleting">取消</v-btn>
-          <v-btn color="error" @click="confirmDelete" :loading="deleting">删除</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <ResourcePickerDialog
+      v-model="showResourcePicker"
+      :default-tab="resourcePickerTab"
+      @select="handleResourceSelect"
+    />
 
-    <v-snackbar v-model="showSaveSuccess" color="success" timeout="2000" location="top">
-      <v-icon start>mdi-check-circle</v-icon>
-      保存成功
-    </v-snackbar>
-
-    <v-snackbar v-model="showSaveError" color="error" timeout="3000" location="top">
-      <v-icon start>mdi-alert-circle</v-icon>
-      {{ saveErrorMessage }}
-    </v-snackbar>
+    <v-navigation-drawer
+      v-model="showMobileToc"
+      location="right"
+      temporary
+      width="300"
+      class="note-editor-mobile-toc"
+    >
+      <div class="note-editor-mobile-toc__header">
+        <div class="note-editor-mobile-toc__title">目录</div>
+        <v-btn icon="mdi-close" variant="text" @click="showMobileToc = false" />
+      </div>
+      <v-divider />
+      <div v-if="tocItems.length > 0" class="note-editor-mobile-toc__body">
+        <button
+          v-for="item in tocItems"
+          :key="item.id"
+          type="button"
+          class="note-editor-toc__item"
+          :class="{ 'is-active': activeHeadingId === item.id }"
+          :style="{ '--level': item.level }"
+          @click="selectMobileTocItem(item.id)"
+        >
+          {{ item.text }}
+        </button>
+      </div>
+      <div v-else class="note-editor-mobile-toc__empty">无目录</div>
+    </v-navigation-drawer>
   </div>
 </template>
 
@@ -175,21 +151,20 @@ import MarkdownIt from 'markdown-it'
 import Viewer from 'viewerjs'
 import 'viewerjs/dist/viewer.css'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import NoteMarkdownEditor from '../../components/note/NoteMarkdownEditor.vue'
+import ResourcePickerDialog from '../compose/ResourcePickerDialog.vue'
 import { useMainStore } from '../../store/mainStore'
-import { trpc } from '../../trpc'
 
-const router = useRouter()
-const route = useRoute()
-const mainStore = useMainStore()
+interface EditorForm {
+  title: string
+  content: string
+}
 
-interface Note {
+interface NoteItem {
   id: string
   title: string
   content: string
-  created_at: string | Date
-  updated_at: string | Date
+  created_at?: string | Date
+  updated_at?: string | Date
 }
 
 interface TocItem {
@@ -203,33 +178,57 @@ interface MarkdownDocument {
   headings: TocItem[]
 }
 
-const note = ref<Note | null>(null)
-const loading = ref(false)
-const error = ref<string | null>(null)
-const isEditing = ref(false)
-const saving = ref(false)
-const deleting = ref(false)
-const showDeleteDialog = ref(false)
-const showSaveSuccess = ref(false)
-const showSaveError = ref(false)
-const saveErrorMessage = ref('')
-const showMobileToc = ref(false)
-const articleRef = ref<HTMLElement | null>(null)
-const activeHeadingId = ref('')
-let headingObserver: IntersectionObserver | null = null
-let imageViewer: Viewer | null = null
-let mermaidModulePromise: Promise<typeof import('mermaid')> | null = null
-let mermaidRenderCount = 0
+type EditorViewMode = 'write' | 'preview'
+type ResourcePickerTab = 'image' | 'note'
 
-const editForm = ref({
-  title: '',
-  content: ''
+const props = withDefaults(defineProps<{
+  modelValue: EditorForm
+  saving?: boolean
+  saveDisabled?: boolean
+  saveLabel?: string
+  showCancel?: boolean
+  cancelDisabled?: boolean
+  titlePlaceholder?: string
+  contentPlaceholder?: string
+  autofocusTitle?: boolean
+}>(), {
+  saving: false,
+  saveDisabled: false,
+  saveLabel: '保存',
+  showCancel: true,
+  cancelDisabled: false,
+  titlePlaceholder: '标题',
+  contentPlaceholder: '开始编写 Markdown 内容...',
+  autofocusTitle: true
 })
+
+const emit = defineEmits<{
+  (e: 'update:modelValue', value: EditorForm): void
+  (e: 'save', payload?: { keepEditing?: boolean }): void
+  (e: 'cancel'): void
+}>()
+
+const mainStore = useMainStore()
 
 const STICKY_TOP = 72
 const HEADING_OFFSET = STICKY_TOP + 36
 const IMAGE_FILE_EXTENSION_RE = /\.(?:apng|avif|bmp|gif|ico|jpe?g|jfif|png|svg|webp)(?:[?#].*)?$/i
 const VIDEO_FILE_EXTENSION_RE = /\.(?:m4v|mov|mp4|ogg|webm)(?:[?#].*)?$/i
+
+const editorView = ref<EditorViewMode>('write')
+const articleRef = ref<HTMLElement | null>(null)
+const noteEditorRef = ref<HTMLTextAreaElement | null>(null)
+const activeHeadingId = ref('')
+const showResourcePicker = ref(false)
+const showMobileToc = ref(false)
+const resourcePickerTab = ref<ResourcePickerTab>('image')
+const editorSelectionStart = ref(0)
+const editorSelectionEnd = ref(0)
+const isApplyingResourceSelection = ref(false)
+let headingObserver: IntersectionObserver | null = null
+let imageViewer: Viewer | null = null
+let mermaidModulePromise: Promise<typeof import('mermaid')> | null = null
+let mermaidRenderCount = 0
 
 const slugify = (text: string) => {
   return text
@@ -419,12 +418,11 @@ const enhanceRenderedHtml = (html: string) => {
 }
 
 const buildMarkdownDocument = (content: string) => {
-  const safeContent = content || ''
   const env = {
     headings: [] as TocItem[],
     slugCounts: new Map<string, number>()
   }
-  const html = markdown.render(safeContent, env)
+  const html = markdown.render(content || '', env)
 
   return {
     html: enhanceRenderedHtml(html),
@@ -432,38 +430,23 @@ const buildMarkdownDocument = (content: string) => {
   } as MarkdownDocument
 }
 
-const canSave = computed(() => {
-  return editForm.value.title.trim() !== '' && editForm.value.content.trim() !== ''
-})
+const previewDocument = computed(() => buildMarkdownDocument(props.modelValue.content))
+const tocItems = computed(() => previewDocument.value.headings)
+const articleHtml = computed(() => editorView.value === 'preview' ? previewDocument.value.html : '')
 
-const hasChanges = computed(() => {
-  if (!note.value) return false
-
-  return (
-    editForm.value.title.trim() !== note.value.title.trim() ||
-    editForm.value.content.trim() !== note.value.content.trim()
-  )
-})
-
-const noteId = computed(() => route.params.id as string)
-const isEditRoute = computed(() => route.query.mode === 'edit')
-const tocItems = computed(() => viewDocument.value.headings)
-const viewDocument = computed(() => buildMarkdownDocument(note.value?.content || ''))
-const articleHtml = computed(() => note.value && !isEditing.value ? viewDocument.value.html : '')
-
-const syncEditModeToRoute = (editing: boolean) => {
-  const query = { ...route.query }
-
-  if (editing) {
-    query.mode = 'edit'
-  } else {
-    delete query.mode
-  }
-
-  router.replace({
-    path: route.path,
-    query
+const updateForm = (patch: Partial<EditorForm>) => {
+  emit('update:modelValue', {
+    ...props.modelValue,
+    ...patch
   })
+}
+
+const updateTitle = (title: string) => {
+  updateForm({ title })
+}
+
+const updateContent = (content: string) => {
+  updateForm({ content })
 }
 
 const disconnectHeadingObserver = () => {
@@ -522,9 +505,7 @@ const syncHeadingObserver = () => {
     (entries) => {
       const visibleEntries = entries
         .filter((entry) => entry.isIntersecting)
-        .sort((a, b) => {
-          return (a.target as HTMLElement).offsetTop - (b.target as HTMLElement).offsetTop
-        })
+        .sort((a, b) => (a.target as HTMLElement).offsetTop - (b.target as HTMLElement).offsetTop)
 
       if (visibleEntries[0]) {
         activeHeadingId.value = (visibleEntries[0].target as HTMLElement).id
@@ -571,113 +552,118 @@ const renderMermaidDiagrams = async () => {
   }))
 }
 
-const fetchNote = async () => {
-  if (!noteId.value) {
-    error.value = '笔记ID不存在'
+const syncEditorSelection = () => {
+  if (!noteEditorRef.value) return
+
+  editorSelectionStart.value = noteEditorRef.value.selectionStart ?? 0
+  editorSelectionEnd.value = noteEditorRef.value.selectionEnd ?? editorSelectionStart.value
+}
+
+const resizeEditorTextarea = async () => {
+  if (editorView.value !== 'write') return
+
+  await nextTick()
+
+  if (!noteEditorRef.value) return
+
+  const textarea = noteEditorRef.value
+  textarea.style.height = 'auto'
+  textarea.style.height = `${Math.max(textarea.scrollHeight, 420)}px`
+}
+
+const handleContentInput = async (event: Event) => {
+  const target = event.target as HTMLTextAreaElement
+  updateContent(target.value)
+  syncEditorSelection()
+  await resizeEditorTextarea()
+}
+
+const restoreEditorFocus = async () => {
+  if (editorView.value !== 'write') return
+
+  await nextTick()
+
+  if (!noteEditorRef.value) return
+
+  noteEditorRef.value.focus()
+  noteEditorRef.value.setSelectionRange(editorSelectionStart.value, editorSelectionEnd.value)
+}
+
+const insertTextAtCursor = async (text: string) => {
+  const textarea = noteEditorRef.value
+  const start = editorSelectionStart.value
+  const end = editorSelectionEnd.value
+  const nextCursor = start + text.length
+
+  if (!textarea) {
+    const content = props.modelValue.content
+    updateContent(`${content.slice(0, start)}${text}${content.slice(end)}`)
+    editorSelectionStart.value = nextCursor
+    editorSelectionEnd.value = nextCursor
+    await restoreEditorFocus()
     return
   }
 
+  const scrollTop = textarea.scrollTop
+  textarea.focus()
+  textarea.setSelectionRange(start, end)
+  textarea.setRangeText(text, start, end, 'end')
+
+  updateContent(textarea.value)
+  editorSelectionStart.value = textarea.selectionStart ?? nextCursor
+  editorSelectionEnd.value = textarea.selectionEnd ?? nextCursor
+
+  await resizeEditorTextarea()
+  await nextTick()
+
+  requestAnimationFrame(() => {
+    if (!noteEditorRef.value) return
+
+    noteEditorRef.value.focus()
+    noteEditorRef.value.setSelectionRange(editorSelectionStart.value, editorSelectionEnd.value)
+    noteEditorRef.value.scrollTop = scrollTop
+  })
+}
+
+const openResourcePicker = (tab: ResourcePickerTab = 'image') => {
+  if (editorView.value !== 'write') {
+    editorView.value = 'write'
+  }
+
+  syncEditorSelection()
+  resourcePickerTab.value = tab
+  showResourcePicker.value = true
+}
+
+const handleResourceSelect = async (
+  payload:
+    | { type: 'image'; item: { name: string; url: string } }
+    | { type: 'note'; item: NoteItem }
+) => {
   try {
-    loading.value = true
-    error.value = null
-    const result = await trpc.notepad.getNoteById.query({ id: noteId.value }) as Note
-    note.value = result
-    editForm.value = {
-      title: result.title,
-      content: result.content
+    isApplyingResourceSelection.value = true
+
+    if (payload.type === 'image') {
+      const imageName = payload.item.name.split('/').pop() || payload.item.name
+      await insertTextAtCursor(`![${imageName}](https://monika.jkloli.net/${payload.item.url})`)
+      return
     }
-    isEditing.value = isEditRoute.value
-  } catch (err: any) {
-    console.error('获取笔记失败:', err)
-    error.value = err?.message || '获取笔记失败，请稍后重试'
+
+    const title = payload.item.title.trim() || '未命名笔记'
+    await insertTextAtCursor(`[${title}](/note/${payload.item.id})`)
   } finally {
-    loading.value = false
+    requestAnimationFrame(() => {
+      isApplyingResourceSelection.value = false
+    })
   }
-}
-
-const enterEditMode = () => {
-  if (!note.value) return
-
-  editForm.value = {
-    title: note.value.title,
-    content: note.value.content
-  }
-  isEditing.value = true
-  syncEditModeToRoute(true)
-}
-
-const cancelEdit = () => {
-  if (!note.value) return
-
-  editForm.value = {
-    title: note.value.title,
-    content: note.value.content
-  }
-  isEditing.value = false
-  syncEditModeToRoute(false)
-}
-
-const saveNote = async (options?: { keepEditing?: boolean }) => {
-  if (!canSave.value || !note.value || !hasChanges.value) return
-
-  try {
-    saving.value = true
-    const result = await trpc.notepad.updateNote.mutate({
-      id: note.value.id,
-      title: editForm.value.title.trim(),
-      content: editForm.value.content.trim()
-    }) as Note
-
-    note.value = result
-    editForm.value = {
-      title: result.title,
-      content: result.content
-    }
-    isEditing.value = options?.keepEditing === true
-    syncEditModeToRoute(isEditing.value)
-    showSaveSuccess.value = true
-    mainStore.triggerRefresh()
-  } catch (err: any) {
-    console.error('保存笔记失败:', err)
-    saveErrorMessage.value = err?.message || '保存失败，请稍后重试'
-    showSaveError.value = true
-  } finally {
-    saving.value = false
-  }
-}
-
-const deleteNote = () => {
-  showDeleteDialog.value = true
-}
-
-const confirmDelete = async () => {
-  if (!note.value) return
-
-  try {
-    deleting.value = true
-    await trpc.notepad.deleteNote.mutate({ id: note.value.id })
-    mainStore.triggerRefresh()
-    router.push('/notes')
-  } catch (err: any) {
-    console.error('删除笔记失败:', err)
-    saveErrorMessage.value = err?.message || '删除失败，请稍后重试'
-    showSaveError.value = true
-    showDeleteDialog.value = false
-  } finally {
-    deleting.value = false
-  }
-}
-
-const goBack = () => {
-  if (window.history.length > 1) {
-    router.back()
-    return
-  }
-
-  router.push('/notes')
 }
 
 const scrollToHeading = async (id: string) => {
+  if (editorView.value !== 'preview') {
+    editorView.value = 'preview'
+    await nextTick()
+  }
+
   const target = document.getElementById(id)
   if (!target) return
 
@@ -691,65 +677,48 @@ const selectMobileTocItem = async (id: string) => {
   await scrollToHeading(id)
 }
 
-const formatDate = (dateString: string | Date) => {
-  const date = typeof dateString === 'string' ? new Date(dateString) : dateString
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+const handleKeydown = (event: KeyboardEvent) => {
+  if (!(event.metaKey || event.ctrlKey)) return
+  if (event.key.toLowerCase() !== 's') return
+
+  event.preventDefault()
+
+  if (!props.saveDisabled && !props.saving) {
+    emit('save', { keepEditing: true })
+  }
 }
 
+watch(showResourcePicker, async (open) => {
+  if (!open && !isApplyingResourceSelection.value) {
+    await restoreEditorFocus()
+  }
+})
+
 watch(
-  () => route.params.id,
-  (newId) => {
-    if (newId) {
-      fetchNote()
+  () => props.modelValue.content,
+  async () => {
+    if (editorView.value === 'write') {
+      await resizeEditorTextarea()
     }
   }
 )
 
 watch(
-  () => route.query.mode,
-  (mode) => {
-    if (!note.value) return
-
-    if (mode === 'edit') {
-      editForm.value = {
-        title: note.value.title,
-        content: note.value.content
-      }
-      isEditing.value = true
-      return
+  () => editorView.value,
+  async (view) => {
+    if (view === 'write') {
+      await resizeEditorTextarea()
     }
-
-    if (isEditing.value) {
-      isEditing.value = false
-      editForm.value = {
-        title: note.value.title,
-        content: note.value.content
-      }
-    }
-  }
+  },
+  { flush: 'post' }
 )
 
 watch(
-  () => mainStore.authenticated,
-  (authenticated) => {
-    if (authenticated && noteId.value) {
-      fetchNote()
-    }
-  }
-)
-
-watch(
-  [articleHtml, () => isEditing.value, () => mainStore.darkMode],
-  async ([html, editing]) => {
+  [articleHtml, () => mainStore.darkMode],
+  async () => {
     await nextTick()
 
-    if (editing || !html) {
+    if (!articleHtml.value) {
       disconnectHeadingObserver()
       destroyImageViewer()
       activeHeadingId.value = ''
@@ -764,82 +733,33 @@ watch(
 )
 
 onMounted(() => {
-  if (mainStore.authenticated) {
-    fetchNote()
-  }
+  window.addEventListener('keydown', handleKeydown)
+  void resizeEditorTextarea()
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleKeydown)
   disconnectHeadingObserver()
   destroyImageViewer()
 })
 </script>
 
 <style scoped>
-.note-detail-page {
-  --note-sticky-top: 72px;
-  min-height: 100%;
-  padding: 0 clamp(16px, 4vw, 32px) 48px;
-}
-
-.note-state {
-  min-height: 55vh;
+.note-editor-workspace {
   display: grid;
-  place-items: center;
-  gap: 12px;
-  text-align: center;
-  color: rgba(var(--v-theme-on-surface), 0.74);
+  gap: 20px;
+  min-height: calc(100vh - var(--note-sticky-top, 72px) - 48px);
 }
 
-.note-state-error {
-  background: rgba(var(--v-theme-error), 0.06);
-  border: 1px solid rgba(var(--v-theme-error), 0.16);
-  border-radius: 20px;
-  padding: 32px;
-}
-
-.note-state-actions {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-
-.note-shell {
-  display: grid;
-  gap: 0;
-}
-
-.note-topbar {
+.note-editor-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 16px;
-  min-height: var(--note-sticky-top);
-  padding: 14px 0;
-  border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-}
-
-.note-topbar-main {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.note-topbar-meta {
-  min-width: 0;
-}
-
-.note-topbar-time {
-  display: flex;
   flex-wrap: wrap;
-  gap: 10px 18px;
-  font-size: 13px;
-  color: rgba(var(--v-theme-on-surface), 0.8);
 }
 
-.note-topbar-actions {
+.note-editor-toolbar__right {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -847,44 +767,49 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
 }
 
-.note-mobile-toc-trigger {
+.note-editor-mobile-toc-trigger {
   display: none;
 }
 
-.note-layout {
+.note-editor-layout {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   gap: 24px;
   align-items: start;
-  padding-top: 24px;
+  min-height: 0;
 }
 
-.note-sidebar {
+.note-editor-layout.is-write-mode {
+  height: calc(100vh - var(--note-sticky-top, 72px) - 132px);
+  align-items: stretch;
+}
+
+.note-editor-sidebar {
   position: sticky;
-  top: calc(var(--note-sticky-top) + 24px);
+  top: calc(var(--note-sticky-top, 72px) + 24px);
   align-self: start;
   min-width: 0;
-  max-height: calc(100vh - var(--note-sticky-top) - 36px);
+  max-height: calc(100vh - var(--note-sticky-top, 72px) - 36px);
   overflow: auto;
   padding-right: 16px;
   border-right: 1px solid rgba(var(--v-theme-on-surface), 0.08);
 }
 
-.note-sidebar-title {
+.note-editor-sidebar__title {
   font-size: 14px;
   font-weight: 700;
 }
 
-.note-sidebar-divider {
+.note-editor-sidebar__divider {
   margin: 12px 0 14px;
 }
 
-.note-toc {
+.note-editor-toc {
   display: grid;
   gap: 4px;
 }
 
-.note-toc-item {
+.note-editor-toc__item {
   appearance: none;
   width: 100%;
   border: 0;
@@ -896,17 +821,17 @@ onBeforeUnmount(() => {
   transition: color 0.16s ease;
 }
 
-.note-toc-item:hover,
-.note-toc-item.is-active {
+.note-editor-toc__item:hover,
+.note-editor-toc__item.is-active {
   color: rgb(var(--v-theme-primary));
 }
 
-.note-toc-empty {
+.note-editor-sidebar__empty {
   font-size: 13px;
   color: rgba(var(--v-theme-on-surface), 0.58);
 }
 
-.note-mobile-toc__header {
+.note-editor-mobile-toc__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -914,44 +839,78 @@ onBeforeUnmount(() => {
   padding: 16px;
 }
 
-.note-mobile-toc__title {
+.note-editor-mobile-toc__title {
   font-size: 16px;
   font-weight: 700;
 }
 
-.note-mobile-toc__body {
+.note-editor-mobile-toc__body {
   display: grid;
   gap: 4px;
   padding: 12px 16px 20px;
 }
 
-.note-mobile-toc__empty {
+.note-editor-mobile-toc__empty {
   padding: 20px 16px;
   font-size: 13px;
   color: rgba(var(--v-theme-on-surface), 0.58);
 }
 
-.note-main {
+.note-editor-main {
   min-width: 0;
-  padding-left: 8px;
+  min-height: 0;
 }
 
-.note-reader {
-  min-height: calc(100vh - var(--note-sticky-top) - 24px);
+.note-editor-card {
+  min-height: calc(100vh - var(--note-sticky-top, 72px) - 120px);
 }
 
-.note-reader-header {
-  padding: 0 0 24px;
+.note-editor-layout.is-write-mode .note-editor-card {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
 }
 
-.note-title {
-  margin: 0;
+.note-editor-card__header {
+  padding: 10px 0 24px;
+}
+
+.note-editor-title-input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
+  font: inherit;
   font-size: clamp(32px, 4vw, 48px);
+  font-weight: 700;
   line-height: 1.08;
-  word-break: break-word;
 }
 
+.note-editor-card__write {
+  min-height: 0;
+}
+
+.note-editor-body {
+  display: block;
+  width: 100%;
+  min-height: 420px;
+  height: auto;
+  overflow: hidden;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: rgb(var(--v-theme-on-surface));
+  font-size: 15px;
+  line-height: 1.8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  padding: 24px 0 24px;
+}
+
+.note-preview,
 .note-markdown {
+  min-height: calc(100vh - var(--note-sticky-top, 72px) - 120px);
   padding: 24px 0 0;
   font-size: 16px;
   line-height: 1.85;
@@ -965,7 +924,7 @@ onBeforeUnmount(() => {
 .note-markdown :deep(h4) {
   margin: 1.9em 0 0.7em;
   line-height: 1.2;
-  scroll-margin-top: calc(var(--note-sticky-top) + 54px);
+  scroll-margin-top: calc(var(--note-sticky-top, 72px) + 54px);
 }
 
 .note-markdown :deep(h1:first-child),
@@ -1065,11 +1024,15 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 1100px) {
-  .note-layout {
+  .note-editor-layout {
     grid-template-columns: 1fr;
   }
 
-  .note-sidebar {
+  .note-editor-layout.is-write-mode {
+    height: auto;
+  }
+
+  .note-editor-sidebar {
     position: static;
     max-height: none;
     overflow: visible;
@@ -1079,35 +1042,33 @@ onBeforeUnmount(() => {
     border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.08);
   }
 
-  .note-main {
-    padding-left: 0;
+  .note-editor-card,
+  .note-editor-layout.is-write-mode .note-editor-card {
+    min-height: 0;
+    height: auto;
+    overflow: visible;
   }
 }
 
 @media (max-width: 760px) {
-  .note-detail-page {
-    padding: 0 12px calc(env(safe-area-inset-bottom, 0px) + 104px);
+  .note-editor-workspace {
+    gap: 0;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
   }
 
-  .note-topbar {
-    min-height: auto;
-    padding: 12px 0;
+  .note-editor-toolbar {
+    display: contents;
   }
 
-  .note-topbar-time,
-  .note-topbar-actions {
-    width: 100%;
-  }
-
-  .note-mobile-toc-trigger {
+  .note-editor-mobile-toc-trigger {
     display: inline-flex;
   }
 
-  .note-topbar-meta {
+  .note-editor-sidebar {
     display: none;
   }
 
-  .note-topbar-actions {
+  .note-editor-toolbar__right {
     position: fixed;
     left: 0;
     right: 0;
@@ -1123,39 +1084,16 @@ onBeforeUnmount(() => {
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
   }
 
-  .note-sidebar {
-    display: none;
-  }
-
-  .note-reader-header,
-  .note-markdown {
+  .note-editor-card__header,
+  .note-preview,
+  .note-editor-card__write {
     padding-left: 0;
     padding-right: 0;
   }
 
-  .note-topbar-actions > * {
+  .note-editor-toolbar__right > * {
     flex: 1 1 auto;
     min-width: 0;
-  }
-
-  .note-more-btn {
-    border-radius: 0 !important;
-  }
-}
-
-@media print {
-  .note-topbar,
-  .note-sidebar {
-    display: none;
-  }
-
-  .note-reader {
-    border: 0;
-    background: transparent;
-  }
-
-  .note-markdown {
-    padding: 0;
   }
 }
 </style>

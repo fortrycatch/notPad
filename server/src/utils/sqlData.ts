@@ -190,6 +190,31 @@ export const userData = {
       throw error
     }
   },
+  /** 首次部署：若 users 表无任何用户，则创建默认账号（可用环境变量 DEFAULT_USER_ID / DEFAULT_USER_NAME / DEFAULT_USER_EMAIL / DEFAULT_USER_PASSWORD 覆盖） */
+  ensureDefaultUserIfEmpty: async (): Promise<void> => {
+    try {
+      const [rows] = await pool.execute<RowDataPacket[]>(
+        'SELECT COUNT(*) AS cnt FROM users'
+      )
+      const cnt = Number((rows[0] as RowDataPacket & { cnt: number }).cnt)
+      if (cnt > 0) return
+
+      const id = process.env.DEFAULT_USER_ID || 'admin'
+      const name = process.env.DEFAULT_USER_NAME || '管理员'
+      const email = process.env.DEFAULT_USER_EMAIL || 'admin@localhost'
+      const password = process.env.DEFAULT_USER_PASSWORD || 'admin123'
+
+      await userData.createUser(id, name, email, password)
+      console.warn(
+        '[seed] 数据库中尚无用户，已创建默认账号：用户ID=%s，邮箱=%s。请尽快登录并在设置中修改密码；生产环境请设置 DEFAULT_USER_PASSWORD。',
+        id,
+        email
+      )
+    } catch (error) {
+      console.error('创建默认用户失败:', error)
+      throw error
+    }
+  },
   updateUser: async (id:string, name: string, email: string, password: string): Promise<User | null> => {
     try {
       const user = await userData.getUserById(id)
@@ -212,17 +237,23 @@ export interface Token extends RowDataPacket {
   token: string
   created_at: Date
   used_at: Date | null
+  user_agent: string | null
+  alias: string | null
 }
 export const tokenData = {
   //用户操作凭据
-  createToken: async (user_id: string): Promise<string> => {
+  createToken: async (
+    user_id: string,
+    user_agent: string | null = null,
+    alias: string | null = null
+  ): Promise<string> => {
     try {
       //生成随机加盐的token
       const token = crypto.randomBytes(32).toString('base64')
       const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
       await pool.execute<ResultSetHeader>(
-        'INSERT INTO tokens (user_id, token) VALUES (?, ?)',
-        [user_id, tokenHash]
+        'INSERT INTO tokens (user_id, token, user_agent, alias) VALUES (?, ?, ?, ?)',
+        [user_id, tokenHash, user_agent, alias]
       )
       return token
     } catch (error) {
@@ -277,6 +308,22 @@ export const tokenData = {
       return rows.length > 0 ? rows : null
     } catch (error) {
       console.error('获取用户token失败:', error)
+      throw error
+    }
+  },
+  updateTokenAlias: async (
+    user_id: string,
+    tokenHash: string,
+    alias: string | null
+  ): Promise<boolean> => {
+    try {
+      const [result] = await pool.execute<ResultSetHeader>(
+        'UPDATE tokens SET alias = ? WHERE token = ? AND user_id = ?',
+        [alias, tokenHash, user_id]
+      )
+      return result.affectedRows > 0
+    } catch (error) {
+      console.error('更新 token 别名失败:', error)
       throw error
     }
   }

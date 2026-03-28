@@ -5,6 +5,7 @@ import appRouter from './router/index.js';
 import express from 'express';
 import * as trpcExpress from '@trpc/server/adapters/express';
 import { initDatabase, testConnection } from './database.js';
+import { userData } from './utils/sqlData.js';
 
 export type AppRouter = typeof appRouter;
 
@@ -27,6 +28,7 @@ app.listen(config.port, async () => {
     try {
         await testConnection();
         await initDatabase();
+        await userData.ensureDefaultUserIfEmpty();
         console.log('数据库初始化完成');
     } catch (error) {
         console.error('数据库初始化失败:', error);

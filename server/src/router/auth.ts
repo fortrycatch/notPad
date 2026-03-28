@@ -16,7 +16,7 @@ export default router({
         name: z.string().min(1, '昵称不能为空'),
         email: z.string().email('邮箱格式不正确'),
         password: z.string().min(6, '密码长度至少6位')
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ input, ctx }) => {
         try {
             // 检查用户ID是否已被注册
             const existingUserById = await userData.getUserById(input.user_id);
@@ -54,7 +54,7 @@ export default router({
             }
             
             // 自动登录：创建token
-            const token = await tokenData.createToken(user.id);
+            const token = await tokenData.createToken(user.id, ctx.userAgent);
             
             return {
                 success: true,
@@ -77,7 +77,7 @@ export default router({
     login: publicPro.input(z.object({
         username: z.string(),
         password: z.string()
-    })).mutation(async ({ input }) => {
+    })).mutation(async ({ input, ctx }) => {
         try {
             // 先尝试通过用户ID查找用户
             let user = await userData.getUserById(input.username);
@@ -106,7 +106,7 @@ export default router({
             }
             
             // 创建token
-            const token = await tokenData.createToken(user.id);
+            const token = await tokenData.createToken(user.id, ctx.userAgent);
             
             return {
                 success: true,
@@ -178,12 +178,36 @@ export default router({
     }),
     getTokens: needAuth.query(async ({ ctx }) => {
         const tokens = await tokenData.getTokenByUserId(ctx.user_id!);
-        return tokens ? tokens.map(t => ({
-            token: t.token,
-            created_at: t.created_at,
-            used_at: t.used_at
-        })) : [];
+        return tokens
+            ? tokens.map((t) => ({
+                  token: t.token,
+                  created_at: t.created_at,
+                  used_at: t.used_at,
+                  user_agent: t.user_agent ?? null,
+                  alias: t.alias ?? null
+              }))
+            : [];
     }),
+    setTokenAlias: needAuth
+        .input(
+            z.object({
+                tokenHash: z.string().min(1),
+                alias: z.string().max(128).optional()
+            })
+        )
+        .mutation(async ({ ctx, input }) => {
+            const alias =
+                input.alias === undefined || input.alias.trim() === ''
+                    ? null
+                    : input.alias.trim();
+            const ok = await tokenData.updateTokenAlias(
+                ctx.user_id!,
+                input.tokenHash,
+                alias
+            );
+            if (!ok) throw new Error('Token不存在或无权操作');
+            return { success: true };
+        }),
     revokeToken: needAuth.input(z.object({
         tokenHash: z.string()
     })).mutation(async ({ ctx, input }) => {

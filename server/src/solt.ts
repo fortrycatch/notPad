@@ -1,7 +1,9 @@
-import type { CreateHTTPContextOptions } from "@trpc/server/adapters/standalone";
-import { tokenData } from "./utils/sqlData.js";
+import type { CreateExpressContextOptions } from '@trpc/server/adapters/express'
+import { tokenData } from './utils/sqlData.js'
 
-async function auth(opts: CreateHTTPContextOptions): Promise<{ok: boolean, user_id: string | null}> {
+async function auth(
+  opts: CreateExpressContextOptions
+): Promise<{ ok: boolean; user_id: string | null }> {
     try {
         const { req } = opts;
         const token = req.headers.token as string | undefined;

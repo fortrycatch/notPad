@@ -6,7 +6,7 @@
           <v-icon icon="mdi-image-multiple-outline" size="22" />
         </div>
         <div>
-          <div class="page-title">共 {{ list.length }} 张</div>
+          <div class="page-title">图床</div>
           <div class="page-subtitle">
             {{ activeSortLabel }}{{ search ? ` · 搜索“${search}”` : ' · 支持粘贴上传' }}
           </div>

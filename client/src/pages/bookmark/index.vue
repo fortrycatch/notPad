@@ -7,7 +7,7 @@
         </div>
         <div>
           <div class="page-title">书签</div>
-          <div class="page-subtitle">共 {{ list.length }} 条</div>
+          <!-- <div class="page-subtitle">共 {{ list.length }} 条</div> -->
         </div>
       </div>
       <div class="toolbar-actions desktop-toolbar">

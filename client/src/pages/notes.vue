@@ -6,7 +6,7 @@
           <v-icon icon="mdi-note-text-outline" size="22" />
         </div>
         <div>
-          <div class="page-title">共 {{ store.notes.length }} 条</div>
+          <div class="page-title">笔记</div>
         </div>
       </div>
       <div class="toolbar-actions desktop-toolbar">

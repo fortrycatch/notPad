@@ -63,6 +63,7 @@ onMounted(async () => {
 				<v-list-item nav link title="首页" prepend-icon="mdi-home" to="/" />
 				<v-list-item nav link title="笔记" prepend-icon="mdi-note-text" to="/notes" />
 				<v-list-item nav link title="图床" prepend-icon="mdi-image" to="/image" />
+				<v-list-item nav link title="网盘" prepend-icon="mdi-folder-multiple" to="/file" />
 				<v-list-item nav link title="账户" prepend-icon="mdi-information" to="/account" />
 				<v-list-item nav link title="设置" prepend-icon="mdi-cog" to="/setting" />
 			</v-list>

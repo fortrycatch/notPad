@@ -329,45 +329,364 @@ export const tokenData = {
   }
 }
 export const imageData = {
-  getImageList: async (userId: string, offset: number, sort: 'time' | 'time_desc' | 'name' = 'time_desc', search: string = ''): Promise<Image[]> => {
+  getImageList: async (userId: string, offset: number, sort: 'time' | 'time_desc' | 'name' = 'time_desc', search: string = '', tagId: number | null = null): Promise<Image[]> => {
+    const sortMap: Record<string, string> = {
+      'time': 'i.created_at',
+      'time_desc': 'i.created_at DESC',
+      'name': 'i.name'
+    }
+    const sortSql = sortMap[sort] || 'i.created_at DESC'
+
+    let query: string
+    const params: (string | number)[] = [userId]
+
+    if (tagId) {
+      query = 'SELECT i.* FROM images i INNER JOIN image_tag_map m ON i.id = m.image_id WHERE i.user_id = ? AND m.tag_id = ?'
+      params.push(tagId)
+    } else {
+      query = 'SELECT i.* FROM images i WHERE i.user_id = ?'
+    }
+
+    if (search && search.trim() !== '') {
+      query += ' AND i.name LIKE ?'
+      params.push(`%${search.trim()}%`)
+    }
+
+    query += ` ORDER BY ${sortSql} LIMIT 30 OFFSET ?`
+    params.push(offset * 30)
+
+    const [rows] = await pool.execute<Image[]>(query, params)
+    return rows
+  },
+  addImage: async (name: string, url: string, size: number, userId: string, remark: string): Promise<ResultSetHeader> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'INSERT INTO images (name, url, size, user_id, remark) VALUES (?, ?, ?, ?, ?)',
+      [name, url, size, userId, remark]
+    )
+    return result
+  },
+  renameImage: async (id: number, name: string, userId: string): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'UPDATE images SET name = ? WHERE id = ? AND user_id = ?',
+      [name, id, userId]
+    )
+    return result.affectedRows > 0
+  }
+}
+
+export interface ImageTag extends RowDataPacket {
+  id: number
+  name: string
+  user_id: string
+  created_at: Date
+}
+
+export const imageTagData = {
+  list: async (userId: string): Promise<ImageTag[]> => {
+    const [rows] = await pool.execute<ImageTag[]>(
+      'SELECT * FROM image_tags WHERE user_id = ? ORDER BY name',
+      [userId]
+    )
+    return rows
+  },
+  create: async (name: string, userId: string): Promise<ImageTag> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'INSERT INTO image_tags (name, user_id) VALUES (?, ?)',
+      [name, userId]
+    )
+    const [rows] = await pool.execute<ImageTag[]>(
+      'SELECT * FROM image_tags WHERE id = ?',
+      [result.insertId]
+    )
+    return rows[0]
+  },
+  remove: async (id: number, userId: string): Promise<boolean> => {
+    await pool.execute('DELETE FROM image_tag_map WHERE tag_id = ?', [id])
+    const [result] = await pool.execute<ResultSetHeader>(
+      'DELETE FROM image_tags WHERE id = ? AND user_id = ?',
+      [id, userId]
+    )
+    return result.affectedRows > 0
+  },
+  getTagsForImage: async (imageId: number): Promise<ImageTag[]> => {
+    const [rows] = await pool.execute<ImageTag[]>(
+      'SELECT t.* FROM image_tags t INNER JOIN image_tag_map m ON t.id = m.tag_id WHERE m.image_id = ? ORDER BY t.name',
+      [imageId]
+    )
+    return rows
+  },
+  addTagToImage: async (imageId: number, tagId: number): Promise<boolean> => {
     try {
-      // 安全的排序字段映射，防止SQL注入
-      const sortMap: Record<string, string> = {
-        'time': 'created_at',
-        'time_desc': 'created_at DESC',
-        'name': 'name'
-      }
-      const sort_sql = sortMap[sort] || 'created_at DESC'
-      
-      // 使用参数化查询防止SQL注入
-      let query = 'SELECT * FROM images WHERE user_id = ?'
-      const params: (string | number)[] = [userId]
-      
-      if(search && search.trim() !== ''){
-        query += ' AND name LIKE ?'
-        params.push(`%${search.trim()}%`)
-      }
-      
-      query += ` ORDER BY ${sort_sql} LIMIT 30 OFFSET ?`
-      params.push(offset * 30)
-      
-      const [rows] = await pool.execute<Image[]>(query, params)
-      return rows
+      await pool.execute(
+        'INSERT INTO image_tag_map (image_id, tag_id) VALUES (?, ?)',
+        [imageId, tagId]
+      )
+      return true
+    } catch (e: unknown) {
+      const err = e as { code?: string }
+      if (err.code === 'ER_DUP_ENTRY') return false
+      throw e
+    }
+  },
+  removeTagFromImage: async (imageId: number, tagId: number): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'DELETE FROM image_tag_map WHERE image_id = ? AND tag_id = ?',
+      [imageId, tagId]
+    )
+    return result.affectedRows > 0
+  }
+}
+
+export interface DriveFolder extends RowDataPacket {
+  id: string
+  name: string
+  parent_id: string | null
+  user_id: string
+  created_at: Date
+}
+
+export interface DriveFile extends RowDataPacket {
+  id: number
+  name: string
+  oss_key: string
+  size: number
+  mime_type: string
+  folder_id: string | null
+  user_id: string
+  created_at: Date
+}
+
+/** 网盘列表单次查询条数（文件夹、文件各自 LIMIT） */
+export const DRIVE_PAGE_SIZE = 30
+
+const createDriveId = () => crypto.randomUUID()
+
+const getDriveSortSql = (sort: 'time' | 'time_desc' | 'name' = 'time_desc') => {
+  const sortMap: Record<string, string> = {
+    time: 'created_at',
+    time_desc: 'created_at DESC',
+    name: 'name'
+  }
+
+  return sortMap[sort] || 'created_at DESC'
+}
+
+export const fileFolderData = {
+  getFolderById: async (id: string, userId: string): Promise<DriveFolder | null> => {
+    try {
+      const [rows] = await pool.execute<DriveFolder[]>(
+        'SELECT * FROM drive_folders WHERE id = ? AND user_id = ?',
+        [id, userId]
+      )
+      return rows.length > 0 ? rows[0] : null
     } catch (error) {
-      console.error('获取图片列表失败:', error)
+      console.error('获取网盘文件夹失败:', error)
       throw error
     }
   },
-  addImage: async (name: string, url: string, size: number, userId: string, remark: string): Promise<ResultSetHeader> => {
+  createFolder: async (name: string, parentId: string | null, userId: string): Promise<DriveFolder | null> => {
     try {
-      const [result] = await pool.execute<ResultSetHeader>(
-        'INSERT INTO images (name, url, size, user_id, remark) VALUES (?, ?, ?, ?, ?)',
-        [name, url, size, userId, remark]
+      const id = createDriveId()
+      await pool.execute<ResultSetHeader>(
+        'INSERT INTO drive_folders (id, name, parent_id, user_id) VALUES (?, ?, ?, ?)',
+        [id, name, parentId, userId]
       )
-      return result
+      return await fileFolderData.getFolderById(id, userId)
     } catch (error) {
-      console.error('添加图片失败:', error)
+      console.error('创建网盘文件夹失败:', error)
       throw error
     }
+  },
+  listByParent: async (
+    userId: string,
+    parentId: string | null,
+    sort: 'time' | 'time_desc' | 'name' = 'name',
+    search: string = '',
+    offset: number = 0
+  ): Promise<DriveFolder[]> => {
+    try {
+      let query = 'SELECT * FROM drive_folders WHERE user_id = ? AND parent_id <=> ?'
+      const params: Array<string | number | null> = [userId, parentId]
+
+      if (search.trim() !== '') {
+        query += ' AND name LIKE ?'
+        params.push(`%${search.trim()}%`)
+      }
+
+      query += ` ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`
+      params.push(offset * DRIVE_PAGE_SIZE)
+
+      const [rows] = await pool.execute<DriveFolder[]>(query, params)
+      return rows
+    } catch (error) {
+      console.error('获取网盘文件夹列表失败:', error)
+      throw error
+    }
+  },
+  searchFolders: async (
+    userId: string,
+    search: string,
+    sort: 'time' | 'time_desc' | 'name' = 'name',
+    offset: number = 0
+  ): Promise<DriveFolder[]> => {
+    try {
+      const [rows] = await pool.execute<DriveFolder[]>(
+        `SELECT * FROM drive_folders WHERE user_id = ? AND name LIKE ? ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`,
+        [userId, `%${search.trim()}%`, offset * DRIVE_PAGE_SIZE]
+      )
+      return rows
+    } catch (error) {
+      console.error('全局搜索网盘文件夹失败:', error)
+      throw error
+    }
+  },
+  renameFolder: async (id: string, name: string, userId: string): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'UPDATE drive_folders SET name = ? WHERE id = ? AND user_id = ?',
+      [name, id, userId]
+    )
+    return result.affectedRows > 0
+  },
+  getBreadcrumbs: async (folderId: string | null, userId: string): Promise<DriveFolder[]> => {
+    try {
+      if (!folderId) return []
+
+      const breadcrumbs: DriveFolder[] = []
+      let currentId: string | null = folderId
+
+      while (currentId) {
+        const folder = await fileFolderData.getFolderById(currentId, userId)
+        if (!folder) break
+        breadcrumbs.unshift(folder)
+        currentId = folder.parent_id
+      }
+
+      return breadcrumbs
+    } catch (error) {
+      console.error('获取网盘面包屑失败:', error)
+      throw error
+    }
+  }
+}
+
+export const fileData = {
+  getFileById: async (id: number, userId: string): Promise<DriveFile | null> => {
+    try {
+      const [rows] = await pool.execute<DriveFile[]>(
+        'SELECT * FROM drive_files WHERE id = ? AND user_id = ?',
+        [id, userId]
+      )
+      return rows.length > 0 ? rows[0] : null
+    } catch (error) {
+      console.error('获取网盘文件失败:', error)
+      throw error
+    }
+  },
+  addFile: async (
+    name: string,
+    ossKey: string,
+    size: number,
+    mimeType: string,
+    folderId: string | null,
+    userId: string
+  ): Promise<DriveFile | null> => {
+    try {
+      const [result] = await pool.execute<ResultSetHeader>(
+        'INSERT INTO drive_files (name, oss_key, size, mime_type, folder_id, user_id) VALUES (?, ?, ?, ?, ?, ?)',
+        [name, ossKey, size, mimeType, folderId, userId]
+      )
+      return await fileData.getFileById(result.insertId, userId)
+    } catch (error) {
+      console.error('添加网盘文件失败:', error)
+      throw error
+    }
+  },
+  renameFile: async (id: number, name: string, userId: string): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'UPDATE drive_files SET name = ? WHERE id = ? AND user_id = ?',
+      [name, id, userId]
+    )
+    return result.affectedRows > 0
+  },
+  listByFolder: async (
+    userId: string,
+    folderId: string | null,
+    sort: 'time' | 'time_desc' | 'name' = 'time_desc',
+    search: string = '',
+    offset: number = 0
+  ): Promise<DriveFile[]> => {
+    try {
+      let query = 'SELECT * FROM drive_files WHERE user_id = ? AND folder_id <=> ?'
+      const params: Array<string | number | null> = [userId, folderId]
+
+      if (search.trim() !== '') {
+        query += ' AND name LIKE ?'
+        params.push(`%${search.trim()}%`)
+      }
+
+      query += ` ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`
+      params.push(offset * DRIVE_PAGE_SIZE)
+
+      const [rows] = await pool.execute<DriveFile[]>(query, params)
+      return rows
+    } catch (error) {
+      console.error('获取网盘文件列表失败:', error)
+      throw error
+    }
+  },
+  searchFiles: async (
+    userId: string,
+    search: string,
+    offset: number = 0,
+    folderId: string | null = null,
+    sort: 'time' | 'time_desc' | 'name' = 'time_desc',
+    searchAll: boolean = false
+  ): Promise<DriveFile[]> => {
+    try {
+      if (searchAll) {
+        const [rows] = await pool.execute<DriveFile[]>(
+          `SELECT * FROM drive_files WHERE user_id = ? AND name LIKE ? ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`,
+          [userId, `%${search.trim()}%`, offset * DRIVE_PAGE_SIZE]
+        )
+        return rows
+      }
+
+      return await fileData.listByFolder(userId, folderId, sort, search, offset)
+    } catch (error) {
+      console.error('搜索网盘文件失败:', error)
+      throw error
+    }
+  }
+}
+
+export interface TimelineItem extends RowDataPacket {
+  type: 'note' | 'image' | 'file'
+  id: string
+  name: string
+  summary: string
+  url: string | null
+  size: number
+  created_at: Date
+}
+
+const TIMELINE_PAGE_SIZE = 30
+
+export const timelineData = {
+  getTimeline: async (userId: string, offset: number): Promise<TimelineItem[]> => {
+    const CI = 'COLLATE utf8mb4_unicode_ci'
+    const [rows] = await pool.execute<TimelineItem[]>(
+      `SELECT 'note' ${CI} AS type, id, title AS name, LEFT(content, 100) AS summary, NULL AS url, 0 AS size, created_at
+       FROM notes WHERE user_id = ?
+       UNION ALL
+       SELECT 'image' ${CI}, CAST(id AS CHAR) ${CI}, name, '' ${CI} AS summary, url, size, created_at
+       FROM images WHERE user_id = ?
+       UNION ALL
+       SELECT 'file' ${CI}, CAST(id AS CHAR) ${CI}, name, mime_type AS summary, oss_key AS url, size, created_at
+       FROM drive_files WHERE user_id = ?
+       ORDER BY created_at DESC
+       LIMIT ${TIMELINE_PAGE_SIZE} OFFSET ?`,
+      [userId, userId, userId, offset * TIMELINE_PAGE_SIZE]
+    )
+    return rows
   }
 }

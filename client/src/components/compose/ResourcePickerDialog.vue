@@ -9,7 +9,7 @@
       <v-card-title class="resource-picker__header">
         <div>
           <div class="text-h6">选择资源</div>
-          <div class="resource-picker__subtitle">可选择图片或笔记，后续可继续扩展更多类型。</div>
+          <div class="resource-picker__subtitle">可选择图片、网盘文件或笔记。</div>
         </div>
         <v-btn
           icon="mdi-close"
@@ -21,6 +21,7 @@
       <v-card-text class="resource-picker__body">
         <v-tabs v-model="activeTab" color="primary" grow>
           <v-tab value="image">图片</v-tab>
+          <v-tab value="file">文件</v-tab>
           <v-tab value="note">笔记</v-tab>
         </v-tabs>
 
@@ -49,7 +50,7 @@
             />
             <v-select
               v-model="imageSort"
-              :items="imageSortOptions"
+              :items="sortOptions"
               label="排序"
               variant="filled"
               density="comfortable"
@@ -67,7 +68,7 @@
 
           <div class="upload-box">
             <v-file-input
-              v-model="uploadFile"
+              v-model="imageUploadFile"
               label="选择图片文件"
               accept="image/*"
               prepend-icon="mdi-image-plus"
@@ -107,7 +108,7 @@
                 cover
               />
               <div class="image-item__meta">
-                <div class="image-item__title">{{ getImageName(image.name) }}</div>
+                <div class="image-item__title">{{ getBaseName(image.name) }}</div>
                 <div class="image-item__sub">
                   <span>{{ formatFileSize(image.size) }}</span>
                   <span>{{ formatDate(image.created_at) }}</span>
@@ -115,6 +116,126 @@
               </div>
             </v-card>
           </div>
+        </div>
+
+        <div v-else-if="activeTab === 'file'" class="resource-panel">
+          <div class="resource-toolbar">
+            <v-text-field
+              v-model="fileSearch"
+              label="搜索文件"
+              placeholder="按名称搜索当前目录"
+              prepend-inner-icon="mdi-magnify"
+              variant="filled"
+              density="comfortable"
+              hide-details
+            />
+            <v-select
+              v-model="fileSort"
+              :items="sortOptions"
+              label="排序"
+              variant="filled"
+              density="comfortable"
+              hide-details
+            />
+            <v-btn
+              variant="tonal"
+              prepend-icon="mdi-refresh"
+              :loading="fileLoading"
+              @click="loadFiles"
+            >
+              刷新
+            </v-btn>
+          </div>
+
+          <div class="drive-breadcrumbs">
+            <v-btn variant="text" prepend-icon="mdi-home" @click="openDriveFolder(null)">
+              根目录
+            </v-btn>
+            <template v-for="folder in fileBreadcrumbs" :key="folder.id">
+              <v-icon size="18">mdi-chevron-right</v-icon>
+              <v-btn variant="text" @click="openDriveFolder(folder.id)">
+                {{ folder.name }}
+              </v-btn>
+            </template>
+          </div>
+
+          <div class="d-flex flex-column ga-3">
+            <div class="upload-box">
+              <v-file-input
+                v-model="driveUploadFile"
+                label="选择网盘文件"
+                prepend-icon="mdi-paperclip"
+                variant="outlined"
+                hide-details
+                :disabled="uploadingDriveFile"
+              />
+              <v-btn
+                color="primary"
+                prepend-icon="mdi-upload"
+                :loading="uploadingDriveFile"
+                @click="uploadDriveFileAndSelect"
+              >
+                上传并插入
+              </v-btn>
+            </div>
+            <template v-if="uploadingDriveFile">
+              <v-progress-linear
+                :model-value="driveUploadPercent"
+                color="primary"
+              />
+              <div class="text-caption text-medium-emphasis text-end">
+                {{ driveUploadPercent }}%
+              </div>
+            </template>
+          </div>
+
+          <div v-if="fileLoading" class="resource-empty">
+            <v-progress-circular indeterminate color="primary" />
+            <span>正在加载文件...</span>
+          </div>
+          <div v-else-if="fileFolders.length === 0 && fileList.length === 0" class="resource-empty">
+            <v-icon size="40" color="primary">mdi-folder-open-outline</v-icon>
+            <span>{{ fileSearch.trim() ? '没有匹配的内容' : '当前目录为空' }}</span>
+          </div>
+          <v-list v-else lines="two" class="note-list">
+            <v-list-item
+              v-for="folder in fileFolders"
+              :key="folder.id"
+              class="note-item"
+              @click="openDriveFolder(folder.id)"
+            >
+              <template #prepend>
+                <v-avatar size="36" color="primary" variant="tonal">
+                  <v-icon size="18">mdi-folder</v-icon>
+                </v-avatar>
+              </template>
+              <v-list-item-title class="note-item__title">
+                {{ folder.name }}
+              </v-list-item-title>
+              <v-list-item-subtitle class="note-item__content">
+                文件夹 · {{ formatDate(folder.created_at) }}
+              </v-list-item-subtitle>
+            </v-list-item>
+
+            <v-list-item
+              v-for="file in fileList"
+              :key="file.id"
+              class="note-item"
+              @click="selectFile(file)"
+            >
+              <template #prepend>
+                <v-avatar size="36" color="surface-variant" variant="flat">
+                  <v-icon size="18">{{ getFileIcon(file.mime_type) }}</v-icon>
+                </v-avatar>
+              </template>
+              <v-list-item-title class="note-item__title">
+                {{ file.name }}
+              </v-list-item-title>
+              <v-list-item-subtitle class="note-item__content">
+                {{ formatFileSize(file.size) }} · {{ formatDate(file.created_at) }}
+              </v-list-item-subtitle>
+            </v-list-item>
+          </v-list>
         </div>
 
         <div v-else class="resource-panel">
@@ -178,9 +299,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { trpc } from '../../trpc'
+import { putWithUploadProgress } from '../../utils/putWithUploadProgress'
 
-type ResourceTab = 'image' | 'note'
-type ImageSort = 'time_desc' | 'time' | 'name'
+type ResourceTab = 'image' | 'note' | 'file'
+type ResourceSort = 'time_desc' | 'time' | 'name'
 
 interface ImageItem {
   id?: number
@@ -199,6 +321,24 @@ interface NoteItem {
   updated_at: string | Date
 }
 
+interface DriveFolder {
+  id: string
+  name: string
+  parent_id: string | null
+  created_at: string | Date
+}
+
+interface DriveFileItem {
+  id: number
+  name: string
+  oss_key: string
+  size: number
+  mime_type: string
+  folder_id: string | null
+  created_at: string | Date
+  public_url: string
+}
+
 const props = withDefaults(defineProps<{
   modelValue: boolean
   defaultTab?: ResourceTab
@@ -208,7 +348,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
-  (e: 'select', payload: { type: 'image'; item: ImageItem } | { type: 'note'; item: NoteItem }): void
+  (e: 'select', payload: { type: 'image'; item: ImageItem } | { type: 'note'; item: NoteItem } | { type: 'file'; item: DriveFileItem }): void
 }>()
 
 const IMAGE_HOST = 'https://monika.jkloli.net/'
@@ -216,11 +356,21 @@ const NOTE_PAGE_SIZE = 30
 
 const activeTab = ref<ResourceTab>(props.defaultTab)
 const imageSearch = ref('')
-const imageSort = ref<ImageSort>('time_desc')
+const imageSort = ref<ResourceSort>('time_desc')
 const imageLoading = ref(false)
 const imageList = ref<ImageItem[]>([])
-const uploadFile = ref<File | File[] | null>(null)
+const imageUploadFile = ref<File | File[] | null>(null)
 const uploadingImage = ref(false)
+const fileSearch = ref('')
+const fileSort = ref<ResourceSort>('time_desc')
+const fileLoading = ref(false)
+const fileFolders = ref<DriveFolder[]>([])
+const fileList = ref<DriveFileItem[]>([])
+const fileBreadcrumbs = ref<DriveFolder[]>([])
+const currentFileFolderId = ref<string | null>(null)
+const driveUploadFile = ref<File | File[] | null>(null)
+const uploadingDriveFile = ref(false)
+const driveUploadPercent = ref(0)
 const noteSearch = ref('')
 const noteLoading = ref(false)
 const notesLoaded = ref(false)
@@ -228,8 +378,9 @@ const notes = ref<NoteItem[]>([])
 const feedbackMessage = ref('')
 const feedbackType = ref<'success' | 'warning' | 'error'>('success')
 const suspendImageReload = ref(false)
+const suspendFileReload = ref(false)
 
-const imageSortOptions = [
+const sortOptions = [
   { title: '最新优先', value: 'time_desc' },
   { title: '最早优先', value: 'time' },
   { title: '按名称', value: 'name' }
@@ -251,30 +402,36 @@ const setFeedback = (message: string, type: 'success' | 'warning' | 'error' = 's
 
 const clearTransientState = () => {
   suspendImageReload.value = true
+  suspendFileReload.value = true
   imageSearch.value = ''
   imageSort.value = 'time_desc'
+  imageUploadFile.value = null
+  fileSearch.value = ''
+  fileSort.value = 'time_desc'
+  fileFolders.value = []
+  fileList.value = []
+  fileBreadcrumbs.value = []
+  currentFileFolderId.value = null
+  driveUploadFile.value = null
+  driveUploadPercent.value = 0
   noteSearch.value = ''
-  uploadFile.value = null
   feedbackMessage.value = ''
   window.setTimeout(() => {
     suspendImageReload.value = false
+    suspendFileReload.value = false
   }, 0)
 }
 
-const getSelectedFile = () => {
-  if (Array.isArray(uploadFile.value)) {
-    return uploadFile.value[0] ?? null
+const getSelectedFile = (source: File | File[] | null) => {
+  if (Array.isArray(source)) {
+    return source[0] ?? null
   }
-  return uploadFile.value
+  return source
 }
 
-const getImageUrl = (url: string) => {
-  return `${IMAGE_HOST}${url}`
-}
+const getImageUrl = (url: string) => `${IMAGE_HOST}${url}`
 
-const getImageName = (fullName: string) => {
-  return fullName.split('/').pop() || fullName
-}
+const getBaseName = (fullName: string) => fullName.split('/').pop() || fullName
 
 const formatDate = (value: string | Date) => {
   const date = typeof value === 'string' ? new Date(value) : value
@@ -295,6 +452,15 @@ const formatFileSize = (bytes: number) => {
   return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
+const getFileIcon = (mimeType: string) => {
+  if (mimeType.startsWith('image/')) return 'mdi-file-image-outline'
+  if (mimeType.startsWith('video/')) return 'mdi-file-video-outline'
+  if (mimeType.includes('pdf')) return 'mdi-file-pdf-box'
+  if (mimeType.includes('zip') || mimeType.includes('compressed')) return 'mdi-folder-zip-outline'
+  if (mimeType.startsWith('text/')) return 'mdi-file-document-outline'
+  return 'mdi-file-outline'
+}
+
 const loadImages = async () => {
   try {
     imageLoading.value = true
@@ -309,6 +475,31 @@ const loadImages = async () => {
     setFeedback('加载图片失败，请稍后重试', 'error')
   } finally {
     imageLoading.value = false
+  }
+}
+
+const loadFiles = async () => {
+  try {
+    fileLoading.value = true
+    const result = await trpc.file_drive.list.query({
+      folder_id: currentFileFolderId.value,
+      offset: 0,
+      sort: fileSort.value,
+      search: fileSearch.value.trim()
+    }) as {
+      breadcrumbs: DriveFolder[]
+      folders: DriveFolder[]
+      files: DriveFileItem[]
+    }
+
+    fileBreadcrumbs.value = result.breadcrumbs
+    fileFolders.value = result.folders
+    fileList.value = result.files
+  } catch (error) {
+    console.error('加载文件失败:', error)
+    setFeedback('加载文件失败，请稍后重试', 'error')
+  } finally {
+    fileLoading.value = false
   }
 }
 
@@ -350,6 +541,11 @@ const ensureActiveTabData = async () => {
     return
   }
 
+  if (activeTab.value === 'file') {
+    await loadFiles()
+    return
+  }
+
   await loadNotes()
 }
 
@@ -358,13 +554,23 @@ const selectImage = (image: ImageItem) => {
   emit('update:modelValue', false)
 }
 
+const selectFile = (file: DriveFileItem) => {
+  emit('select', { type: 'file', item: file })
+  emit('update:modelValue', false)
+}
+
 const selectNote = (note: NoteItem) => {
   emit('select', { type: 'note', item: note })
   emit('update:modelValue', false)
 }
 
+const openDriveFolder = async (folderId: string | null) => {
+  currentFileFolderId.value = folderId
+  await loadFiles()
+}
+
 const uploadImage = async () => {
-  const file = getSelectedFile()
+  const file = getSelectedFile(imageUploadFile.value)
   if (!file) {
     setFeedback('请先选择图片文件', 'warning')
     return
@@ -386,19 +592,18 @@ const uploadImage = async () => {
       throw new Error('上传文件失败')
     }
 
-    const created = await trpc.image_bed.addImage.mutate({
-      name: file.name,
-      filename: uploadUrl.filename,
-      remark: ''
-    }) as Partial<ImageItem>
-
     const selectedImage: ImageItem = {
       name: file.name,
       url: uploadUrl.filename,
       size: file.size,
-      created_at: new Date().toISOString(),
-      ...created
+      created_at: new Date().toISOString()
     }
+
+    await trpc.image_bed.addImage.mutate({
+      name: file.name,
+      filename: uploadUrl.filename,
+      remark: ''
+    })
 
     await loadImages()
     setFeedback('图片上传成功，已插入当前内容', 'success')
@@ -408,11 +613,56 @@ const uploadImage = async () => {
     setFeedback('上传图片失败，请稍后重试', 'error')
   } finally {
     uploadingImage.value = false
-    uploadFile.value = null
+    imageUploadFile.value = null
+  }
+}
+
+const uploadDriveFileAndSelect = async () => {
+  const file = getSelectedFile(driveUploadFile.value)
+  if (!file) {
+    setFeedback('请先选择网盘文件', 'warning')
+    return
+  }
+
+  const mimeType = file.type || 'application/octet-stream'
+
+  try {
+    uploadingDriveFile.value = true
+    driveUploadPercent.value = 0
+    const uploadUrl = await trpc.file_drive.getUploadUrl.query({
+      filename: file.name,
+      type: mimeType,
+      folder_id: currentFileFolderId.value
+    })
+
+    await putWithUploadProgress(uploadUrl.url, file, mimeType, (loaded, total) => {
+      if (total > 0) {
+        driveUploadPercent.value = Math.min(100, Math.round((loaded / total) * 100))
+      }
+    })
+
+    const created = await trpc.file_drive.addFile.mutate({
+      name: file.name,
+      filename: uploadUrl.filename,
+      folder_id: currentFileFolderId.value,
+      mime_type: mimeType
+    }) as DriveFileItem
+
+    await loadFiles()
+    setFeedback('文件上传成功，已插入当前内容', 'success')
+    selectFile(created)
+  } catch (error) {
+    console.error('上传网盘文件失败:', error)
+    setFeedback('上传文件失败，请稍后重试', 'error')
+  } finally {
+    uploadingDriveFile.value = false
+    driveUploadPercent.value = 0
+    driveUploadFile.value = null
   }
 }
 
 let imageSearchTimer: number | null = null
+let fileSearchTimer: number | null = null
 
 watch(
   () => props.modelValue,
@@ -425,7 +675,8 @@ watch(
     }
 
     feedbackMessage.value = ''
-    uploadFile.value = null
+    imageUploadFile.value = null
+    driveUploadFile.value = null
   }
 )
 
@@ -449,6 +700,13 @@ watch(imageSort, async () => {
   }
 })
 
+watch(fileSort, async () => {
+  if (suspendFileReload.value) return
+  if (props.modelValue && activeTab.value === 'file') {
+    await loadFiles()
+  }
+})
+
 watch(imageSearch, () => {
   if (suspendImageReload.value) return
   if (imageSearchTimer) {
@@ -462,9 +720,25 @@ watch(imageSearch, () => {
   }, 300)
 })
 
+watch(fileSearch, () => {
+  if (suspendFileReload.value) return
+  if (fileSearchTimer) {
+    window.clearTimeout(fileSearchTimer)
+  }
+
+  fileSearchTimer = window.setTimeout(() => {
+    if (props.modelValue && activeTab.value === 'file') {
+      void loadFiles()
+    }
+  }, 300)
+})
+
 onBeforeUnmount(() => {
   if (imageSearchTimer) {
     window.clearTimeout(imageSearchTimer)
+  }
+  if (fileSearchTimer) {
+    window.clearTimeout(fileSearchTimer)
   }
 })
 </script>
@@ -510,6 +784,13 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
+}
+
+.drive-breadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
 }
 
 .resource-empty {

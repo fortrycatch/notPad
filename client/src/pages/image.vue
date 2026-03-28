@@ -41,10 +41,33 @@
           />
         </v-btn-toggle>
 
+        <v-btn variant="tonal" prepend-icon="mdi-tag-multiple" @click="showTagManager = true">
+          标签管理
+        </v-btn>
+
         <v-btn color="primary" prepend-icon="mdi-upload" @click="openUploadDialog">
           上传图片
         </v-btn>
       </div>
+    </div>
+
+    <div v-if="tags.length > 0" class="tag-filter-row">
+      <v-chip
+        :color="activeTagId === null ? 'primary' : undefined"
+        :variant="activeTagId === null ? 'elevated' : 'outlined'"
+        @click="activeTagId = null"
+      >
+        全部
+      </v-chip>
+      <v-chip
+        v-for="tag in tags"
+        :key="tag.id"
+        :color="activeTagId === tag.id ? 'primary' : undefined"
+        :variant="activeTagId === tag.id ? 'elevated' : 'outlined'"
+        @click="activeTagId = tag.id"
+      >
+        {{ tag.name }}
+      </v-chip>
     </div>
 
     <div v-if="isInitialLoading" class="images-grid">
@@ -57,7 +80,14 @@
     </div>
 
     <div v-else-if="list.length > 0" class="images-grid">
-      <ImageCard v-for="image in list" :key="image.url" :image="image" />
+      <ImageCard
+        v-for="image in list"
+        :key="image.url"
+        :image="image"
+        :all-tags="tags"
+        @renamed="getList()"
+        @tag-changed="getList()"
+      />
     </div>
 
     <div v-else class="empty-state">
@@ -99,6 +129,10 @@
         </v-list-item>
       </v-list>
     </v-menu>
+
+    <v-btn variant="text" prepend-icon="mdi-tag-multiple" @click="showTagManager = true">
+      标签
+    </v-btn>
 
     <v-btn color="primary" prepend-icon="mdi-upload" @click="openUploadDialog">
       上传
@@ -155,6 +189,44 @@
     </v-card>
   </v-dialog>
 
+  <v-dialog v-model="showTagManager" max-width="480">
+    <v-card>
+      <v-card-title class="dialog-title">标签管理</v-card-title>
+      <v-card-text class="tag-manager-body">
+        <div class="tag-create-row">
+          <v-text-field
+            v-model="newTagName"
+            label="新标签名称"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            @keydown.enter="createTag"
+          />
+          <v-btn color="primary" :loading="creatingTag" @click="createTag">添加</v-btn>
+        </div>
+        <v-list v-if="tags.length > 0" density="compact" class="tag-list">
+          <v-list-item v-for="tag in tags" :key="tag.id">
+            <v-list-item-title>{{ tag.name }}</v-list-item-title>
+            <template #append>
+              <v-btn
+                icon="mdi-delete-outline"
+                size="small"
+                variant="text"
+                color="error"
+                @click="deleteTag(tag.id)"
+              />
+            </template>
+          </v-list-item>
+        </v-list>
+        <div v-else class="text-medium-emphasis text-center pa-4">暂无标签</div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="showTagManager = false">关闭</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <v-snackbar v-model="showAlert" color="warning" timeout="3000" location="top">
     <v-icon start>mdi-alert-circle</v-icon>
     {{ alertMessage }}
@@ -168,6 +240,11 @@ import { server } from '../server'
 
 type SortKey = 'time_desc' | 'time' | 'name'
 
+interface TagItem {
+  id: number
+  name: string
+}
+
 const sortOptions: Array<{ value: SortKey; label: string; icon: string }> = [
   { value: 'time_desc', label: '最新上传', icon: 'mdi-clock-time-eight-outline' },
   { value: 'time', label: '最早上传', icon: 'mdi-clock-time-eight' },
@@ -176,6 +253,7 @@ const sortOptions: Array<{ value: SortKey; label: string; icon: string }> = [
 
 const showUploadDialog = ref(false)
 const showSearchDialog = ref(false)
+const showTagManager = ref(false)
 const file = ref<File | null>(null)
 const page = ref(0)
 const showAlert = ref(false)
@@ -188,6 +266,10 @@ const uploading = ref(false)
 const hasMore = ref(true)
 const containerRef = ref<HTMLElement | null>(null)
 const list = ref<any[]>([])
+const tags = ref<TagItem[]>([])
+const activeTagId = ref<number | null>(null)
+const newTagName = ref('')
+const creatingTag = ref(false)
 
 const PAGE_SIZE = 30
 const skeletonItems = Array.from({ length: 8 }, (_, index) => index)
@@ -257,6 +339,41 @@ function pasteHandler(e: ClipboardEvent) {
   showUploadDialog.value = true
 }
 
+async function loadTags() {
+  tags.value = await server.image_bed.listTags.query() as TagItem[]
+}
+
+async function createTag() {
+  const name = newTagName.value.trim()
+  if (!name) return
+
+  creatingTag.value = true
+  try {
+    await server.image_bed.createTag.mutate({ name })
+    newTagName.value = ''
+    await loadTags()
+  } catch (error) {
+    console.error('创建标签失败:', error)
+    showAlert3s('创建标签失败')
+  } finally {
+    creatingTag.value = false
+  }
+}
+
+async function deleteTag(id: number) {
+  try {
+    await server.image_bed.deleteTag.mutate({ id })
+    if (activeTagId.value === id) {
+      activeTagId.value = null
+    }
+    await loadTags()
+    await getList()
+  } catch (error) {
+    console.error('删除标签失败:', error)
+    showAlert3s('删除标签失败')
+  }
+}
+
 async function getList() {
   if (loading.value) return
 
@@ -266,7 +383,8 @@ async function getList() {
       user_id: 'admin',
       offset: 0,
       sort: sortKey.value,
-      search: search.value
+      search: search.value,
+      tag_id: activeTagId.value
     })
     list.value = result
     page.value = 1
@@ -288,7 +406,8 @@ async function loadMore() {
       user_id: 'admin',
       offset: page.value,
       sort: sortKey.value,
-      search: search.value
+      search: search.value,
+      tag_id: activeTagId.value
     })
     if (more.length === 0) {
       hasMore.value = false
@@ -308,6 +427,10 @@ async function loadMore() {
 }
 
 watch(sortKey, () => {
+  getList()
+})
+
+watch(activeTagId, () => {
   getList()
 })
 
@@ -350,6 +473,7 @@ const handleScroll = () => {
 onMounted(() => {
   document.addEventListener('paste', pasteHandler)
   window.addEventListener('scroll', handleScroll, { passive: true })
+  loadTags()
   getList()
 })
 
@@ -432,6 +556,31 @@ onUnmounted(() => {
   flex-shrink: 0;
   scrollbar-width: none;
   -ms-overflow-style: none;
+}
+
+.tag-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0 4px;
+}
+
+.tag-manager-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tag-create-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.tag-list {
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+  border-radius: 12px;
+  padding: 0;
 }
 
 .images-grid {

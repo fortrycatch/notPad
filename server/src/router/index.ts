@@ -3,6 +3,8 @@ import { z } from 'zod';
 import auth from './auth.js';
 import notepad from './notepad.js';
 import image_bed from './image_bed.js';
+import file_drive from './file_drive.js';
+import { timelineData } from '../utils/sqlData.js';
 const appRouter = router({
     hello: publicPro.input(z.string()).query(({ input }) => {
         return `Hello, ${input}!`
@@ -10,9 +12,13 @@ const appRouter = router({
     hello2: needAuth.input(z.string()).query(({ input }) => {
         return `Hello, ${input}!`
     }),
+    timeline: needAuth.input(z.number().int().min(0)).query(async ({ input, ctx }) => {
+        return await timelineData.getTimeline(ctx.user_id, input)
+    }),
     auth,
     notepad,
     image_bed,
+    file_drive,
 })
 export default appRouter;
 export type AppRouter = typeof appRouter;

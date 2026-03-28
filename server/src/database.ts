@@ -66,6 +66,57 @@ export async function initDatabase() {
     `);
 
     await connection.execute(`
+      CREATE TABLE IF NOT EXISTS drive_folders (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        parent_id VARCHAR(36) NULL,
+        user_id VARCHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_parent_id (parent_id),
+        INDEX idx_name (name),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS drive_files (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(255) NOT NULL,
+        oss_key VARCHAR(255) NOT NULL,
+        size BIGINT NOT NULL,
+        mime_type VARCHAR(255) NOT NULL,
+        folder_id VARCHAR(36) NULL,
+        user_id VARCHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_folder_id (folder_id),
+        INDEX idx_name (name),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS image_tags (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(64) NOT NULL,
+        user_id VARCHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_user_name (user_id, name),
+        INDEX idx_user_id (user_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS image_tag_map (
+        image_id INT NOT NULL,
+        tag_id INT NOT NULL,
+        PRIMARY KEY (image_id, tag_id),
+        INDEX idx_tag_id (tag_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(36) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,

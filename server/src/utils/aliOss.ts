@@ -1,7 +1,10 @@
 import OSS from 'ali-oss';
 import config from '../config.js';
-const path = config.aliOss.path;
 import { generateUserCode, getUUID } from './userCode.js';
+
+export type OssPathKey = keyof typeof config.aliOss.paths;
+
+const publicHost = config.aliOss.publicHost.replace(/\/$/, '');
 export const aliOss = new OSS({
     accessKeyId: config.aliOss.accessKeyId,
     accessKeySecret: config.aliOss.accessKeySecret,
@@ -14,15 +17,30 @@ export const aliOss = new OSS({
 export async function test() {
     return await aliOss.list()
 }
-export async function list(userId: string) {
+
+export function getObjectPrefix(pathKey: OssPathKey) {
+    return config.aliOss.paths[pathKey];
+}
+
+export function getPublicUrl(filename: string) {
+    return `${publicHost}/${filename}`;
+}
+
+export async function list(userId: string, pathKey: OssPathKey = 'image') {
     const res = await aliOss.list({
-        prefix: path + '/' + generateUserCode(userId),
+        prefix: getObjectPrefix(pathKey) + '/' + generateUserCode(userId),
     })
     // console.log(res)
     return res.objects
 }
-export async function getUploadUrl(userId: string, filename: string, type: string) {
-    filename = path + '/' + generateUserCode(userId) + "-" + Date.now() + "-" + getUUID() + filename
+
+export async function getUploadUrl(
+    userId: string,
+    pathKey: OssPathKey,
+    suffix: string,
+    type: string
+) {
+    const filename = getObjectPrefix(pathKey) + '/' + generateUserCode(userId) + "-" + Date.now() + "-" + getUUID() + suffix
     const url = await aliOss.signatureUrlV4('PUT', 3600, {
         headers: {
             'content-type': type

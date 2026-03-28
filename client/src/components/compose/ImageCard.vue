@@ -28,7 +28,7 @@
     <v-card class="preview-dialog">
       <v-card-title class="preview-header">
         <div class="preview-header__meta">
-          <div class="preview-title">{{ getImageName(image.name) }}</div>
+          <div class="preview-title">{{ displayName }}</div>
           <div class="preview-subtitle">
             {{ formatFileSize(image.size) }} · {{ formatDate(image.created_at) }}
           </div>
@@ -45,6 +45,18 @@
           class="preview-image"
           @click="openViewer"
         />
+
+        <div v-if="imageTags.length > 0" class="preview-tags">
+          <v-chip
+            v-for="tag in imageTags"
+            :key="tag.id"
+            size="small"
+            closable
+            @click:close="removeTag(tag.id)"
+          >
+            {{ tag.name }}
+          </v-chip>
+        </div>
       </v-card-text>
 
       <v-card-actions class="preview-actions">
@@ -57,6 +69,33 @@
         <v-btn @click="copyImageMarkDown" prepend-icon="mdi-language-markdown">
           Markdown
         </v-btn>
+        <v-btn @click="startRename" prepend-icon="mdi-pencil">
+          重命名
+        </v-btn>
+        <v-menu :close-on-content-click="false">
+          <template #activator="{ props: menuProps }">
+            <v-btn v-bind="menuProps" prepend-icon="mdi-tag-plus">
+              标签
+            </v-btn>
+          </template>
+          <v-list density="compact" min-width="200">
+            <v-list-item
+              v-for="tag in allTags"
+              :key="tag.id"
+              @click="toggleTag(tag)"
+            >
+              <template #prepend>
+                <v-icon :color="isTagged(tag.id) ? 'primary' : undefined">
+                  {{ isTagged(tag.id) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                </v-icon>
+              </template>
+              <v-list-item-title>{{ tag.name }}</v-list-item-title>
+            </v-list-item>
+            <v-list-item v-if="allTags.length === 0" disabled>
+              <v-list-item-title class="text-medium-emphasis">暂无标签</v-list-item-title>
+            </v-list-item>
+          </v-list>
+        </v-menu>
         <v-btn @click="showOssConfig = true" prepend-icon="mdi-tune">
           图片处理
         </v-btn>
@@ -73,35 +112,73 @@
     class="viewer-source"
   />
 
+  <v-dialog v-model="showRenameDialog" max-width="420">
+    <v-card>
+      <v-card-title>重命名图片</v-card-title>
+      <v-card-text>
+        <v-text-field
+          v-model="renameValue"
+          label="新名称"
+          variant="outlined"
+          hide-details
+          autofocus
+          @keydown.enter="confirmRename"
+        />
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="showRenameDialog = false">取消</v-btn>
+        <v-btn color="primary" :loading="renaming" @click="confirmRename">确定</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <OssProcessDialog
     v-model="showOssConfig"
     :image-url="imageUrl"
-    :image-name="getImageName(image.name)"
+    :image-name="displayName"
   />
 </template>
 
 <script lang="ts" setup>
 import Viewer from 'viewerjs'
 import 'viewerjs/dist/viewer.css'
-import { onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import OssProcessDialog from './OssProcessDialog.vue'
+import { server } from '../../server'
+
+interface TagItem {
+    id: number
+    name: string
+}
 
 const props = defineProps<{
     image: any
+    allTags: TagItem[]
 }>()
+
+const emit = defineEmits<{
+    (e: 'renamed'): void
+    (e: 'tagChanged'): void
+}>()
+
 const imageUrl = 'https://monika.jkloli.net/' + props.image.url
 const showPreview = ref(false)
 const showOssConfig = ref(false)
 const downloading = ref(false)
+const showRenameDialog = ref(false)
+const renameValue = ref('')
+const renaming = ref(false)
+const imageTags = ref<TagItem[]>([])
 const viewerImageRef = ref<HTMLImageElement | null>(null)
 let imageViewer: Viewer | null = null
 
-// 获取图片名称（去掉路径前缀）
+const displayName = computed(() => getImageName(props.image.name))
+
 const getImageName = (fullName: string) => {
     return fullName.split('/').pop() || fullName
 }
 
-// 格式化文件大小
 const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 B'
     const k = 1024
@@ -110,7 +187,6 @@ const formatFileSize = (bytes: number) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
-// 格式化日期
 const formatDate = (dateString: string) => {
     const date = new Date(dateString)
     return date.toLocaleDateString('zh-CN', {
@@ -131,6 +207,57 @@ const previewImage = () => {
     showPreview.value = true
 }
 
+const loadImageTags = async () => {
+    if (!props.image.id) return
+    imageTags.value = await server.image_bed.getImageTags.query({ image_id: props.image.id }) as TagItem[]
+}
+
+const isTagged = (tagId: number) => imageTags.value.some((t) => t.id === tagId)
+
+const toggleTag = async (tag: TagItem) => {
+    if (!props.image.id) return
+    if (isTagged(tag.id)) {
+        await server.image_bed.removeTagFromImage.mutate({ image_id: props.image.id, tag_id: tag.id })
+    } else {
+        await server.image_bed.addTagToImage.mutate({ image_id: props.image.id, tag_id: tag.id })
+    }
+    await loadImageTags()
+    emit('tagChanged')
+}
+
+const removeTag = async (tagId: number) => {
+    if (!props.image.id) return
+    await server.image_bed.removeTagFromImage.mutate({ image_id: props.image.id, tag_id: tagId })
+    await loadImageTags()
+    emit('tagChanged')
+}
+
+const startRename = () => {
+    renameValue.value = displayName.value
+    showRenameDialog.value = true
+}
+
+const confirmRename = async () => {
+    const name = renameValue.value.trim()
+    if (!name || !props.image.id) return
+
+    renaming.value = true
+    try {
+        await server.image_bed.rename.mutate({ id: props.image.id, name })
+        props.image.name = name
+        showRenameDialog.value = false
+        emit('renamed')
+    } finally {
+        renaming.value = false
+    }
+}
+
+watch(showPreview, (open) => {
+    if (open) {
+        void loadImageTags()
+    }
+})
+
 const openViewer = () => {
     if (!viewerImageRef.value) return
 
@@ -145,7 +272,7 @@ const openViewer = () => {
         navbar: false,
         rotatable: false,
         scalable: false,
-        title: () => getImageName(props.image.name),
+        title: () => displayName.value,
         toolbar: true,
         transition: true,
         zIndex: 2400,
@@ -170,7 +297,7 @@ const triggerDownload = (url: string, filename: string) => {
 const downloadImage = async () => {
     if (downloading.value) return
 
-    const filename = getImageName(props.image.name)
+    const filename = displayName.value
     try {
         downloading.value = true
         const response = await fetch(imageUrl)
@@ -197,7 +324,7 @@ const copyImageUrl = () => {
 }
 
 const copyImageMarkDown = () => {
-    navigator.clipboard.writeText(`![${getImageName(props.image.name)}](${imageUrl})`)
+    navigator.clipboard.writeText(`![${displayName.value}](${imageUrl})`)
 }
 
 onBeforeUnmount(() => {
@@ -280,6 +407,13 @@ onBeforeUnmount(() => {
 
 .preview-content {
     padding-top: 16px;
+}
+
+.preview-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
 }
 
 .preview-image {

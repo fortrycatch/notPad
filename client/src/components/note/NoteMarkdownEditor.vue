@@ -1,16 +1,7 @@
 <template>
   <div class="note-editor-workspace">
-    <div class="note-editor-toolbar">
+    <div class="note-editor-toolbar desktop-toolbar">
       <div class="note-editor-toolbar__right">
-        <v-btn
-          class="note-editor-mobile-toc-trigger"
-          variant="text"
-          prepend-icon="mdi-format-list-bulleted"
-          :disabled="tocItems.length === 0"
-          @click="showMobileToc = true"
-        >
-          目录
-        </v-btn>
         <v-btn
           variant="text"
           prepend-icon="mdi-paperclip"
@@ -143,6 +134,48 @@
       </div>
       <div v-else class="note-editor-mobile-toc__empty">无目录</div>
     </v-navigation-drawer>
+
+    <div class="mobile-toolbar">
+      <v-btn
+        variant="text"
+        prepend-icon="mdi-format-list-bulleted"
+        :disabled="tocItems.length === 0"
+        @click="showMobileToc = true"
+      >
+        目录
+      </v-btn>
+      <v-btn
+        variant="text"
+        prepend-icon="mdi-paperclip"
+        @click="openResourcePicker('image')"
+      >
+        插入
+      </v-btn>
+      <v-btn
+        variant="text"
+        :prepend-icon="editorView === 'write' ? 'mdi-eye' : 'mdi-pencil'"
+        @click="toggleEditorView"
+      >
+        {{ editorView === 'write' ? '预览' : '编辑' }}
+      </v-btn>
+      <v-btn
+        v-if="showCancel"
+        variant="text"
+        @click="emit('cancel')"
+        :disabled="saving || cancelDisabled"
+      >
+        取消
+      </v-btn>
+      <v-btn
+        color="primary"
+        prepend-icon="mdi-content-save"
+        @click="emit('save', { keepEditing: false })"
+        :loading="saving"
+        :disabled="saveDisabled"
+      >
+        {{ saveLabel }}
+      </v-btn>
+    </div>
   </div>
 </template>
 
@@ -179,7 +212,7 @@ interface MarkdownDocument {
 }
 
 type EditorViewMode = 'write' | 'preview'
-type ResourcePickerTab = 'image' | 'note'
+type ResourcePickerTab = 'image' | 'note' | 'file'
 
 const props = withDefaults(defineProps<{
   modelValue: EditorForm
@@ -625,6 +658,10 @@ const insertTextAtCursor = async (text: string) => {
   })
 }
 
+const toggleEditorView = () => {
+  editorView.value = editorView.value === 'write' ? 'preview' : 'write'
+}
+
 const openResourcePicker = (tab: ResourcePickerTab = 'image') => {
   if (editorView.value !== 'write') {
     editorView.value = 'write'
@@ -638,6 +675,7 @@ const openResourcePicker = (tab: ResourcePickerTab = 'image') => {
 const handleResourceSelect = async (
   payload:
     | { type: 'image'; item: { name: string; url: string } }
+    | { type: 'file'; item: { name: string; public_url: string } }
     | { type: 'note'; item: NoteItem }
 ) => {
   try {
@@ -646,6 +684,11 @@ const handleResourceSelect = async (
     if (payload.type === 'image') {
       const imageName = payload.item.name.split('/').pop() || payload.item.name
       await insertTextAtCursor(`![${imageName}](https://monika.jkloli.net/${payload.item.url})`)
+      return
+    }
+
+    if (payload.type === 'file') {
+      await insertTextAtCursor(`[${payload.item.name}](${payload.item.public_url})`)
       return
     }
 
@@ -767,7 +810,7 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
 }
 
-.note-editor-mobile-toc-trigger {
+.mobile-toolbar {
   display: none;
 }
 
@@ -1056,32 +1099,39 @@ onBeforeUnmount(() => {
     padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 88px);
   }
 
-  .note-editor-toolbar {
-    display: contents;
-  }
-
-  .note-editor-mobile-toc-trigger {
-    display: inline-flex;
+  .desktop-toolbar {
+    display: none;
   }
 
   .note-editor-sidebar {
     display: none;
   }
 
-  .note-editor-toolbar__right {
+  .mobile-toolbar {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 0;
     z-index: 30;
-    width: auto;
+    display: flex;
+    align-items: center;
     justify-content: space-between;
-    padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
+    gap: 6px;
+    padding: 10px 8px calc(env(safe-area-inset-bottom, 0px) + 10px);
     border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
-    border-radius: 0;
     background: rgba(var(--v-theme-surface), 0.96);
     backdrop-filter: blur(12px);
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  }
+
+  .mobile-toolbar > * {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .mobile-toolbar :deep(.v-btn) {
+    padding-inline: 6px;
+    font-size: 12px;
   }
 
   .note-editor-card__header,
@@ -1089,11 +1139,6 @@ onBeforeUnmount(() => {
   .note-editor-card__write {
     padding-left: 0;
     padding-right: 0;
-  }
-
-  .note-editor-toolbar__right > * {
-    flex: 1 1 auto;
-    min-width: 0;
   }
 }
 </style>

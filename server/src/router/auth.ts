@@ -1,6 +1,6 @@
 import { router, publicPro, needAuth } from '../trpc/trpc.js';
 import { z } from 'zod';
-import { userData, tokenData } from '../utils/sqlData.js';
+import { userData, tokenData, settingData } from '../utils/sqlData.js';
 import { getUUID } from '../utils/userCode.js';
 import crypto from 'node:crypto';
 
@@ -53,8 +53,8 @@ export default router({
                 };
             }
             
-            // 自动登录：创建token
             const token = await tokenData.createToken(user.id, ctx.userAgent);
+            const settings = await settingData.getAll(user.id)
             
             return {
                 success: true,
@@ -64,6 +64,7 @@ export default router({
                     name: user.name,
                     email: user.email
                 },
+                settings,
                 message: '注册成功'
             };
         } catch (error: any) {
@@ -105,8 +106,8 @@ export default router({
                 };
             }
             
-            // 创建token
             const token = await tokenData.createToken(user.id, ctx.userAgent);
+            const settings = await settingData.getAll(user.id)
             
             return {
                 success: true,
@@ -115,7 +116,8 @@ export default router({
                     id: user.id,
                     name: user.name,
                     email: user.email
-                }
+                },
+                settings
             };
         } catch (error) {
             console.error('登录失败:', error);
@@ -129,10 +131,12 @@ export default router({
     verifyToken: publicPro.input(z.string()).query(async ({ input }) => {
         try {
             const result = await tokenData.verifyToken(input);
-            return result.ok;
+            if (!result.ok) return { ok: false as const, settings: {} as Record<string, string> }
+            const settings = await settingData.getAll(result.user_id)
+            return { ok: true as const, settings }
         } catch (error) {
             console.error('验证token失败:', error);
-            return false;
+            return { ok: false as const, settings: {} as Record<string, string> }
         }
     }),
     getProfile: needAuth.query(async ({ ctx }) => {

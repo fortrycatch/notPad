@@ -33,18 +33,22 @@ export interface Image extends RowDataPacket {
 
 // 笔记相关的数据库操作
 export const noteData = {
-  // 获取笔记列表
-  getNotes: async (userId: string, offset: number): Promise<NoteListItem[]> => {
-    try {
-      const [rows] = await pool.execute<NoteListItem[]>(
-        'SELECT id,title,LEFT(content,100) AS content,created_at,updated_at FROM notes WHERE user_id = ? ORDER BY updated_at DESC limit 30 offset ?',
-        [userId,offset*30]
-      )
-      return rows
-    } catch (error) {
-      console.error('获取笔记列表失败:', error)
-      throw error
+  getNotes: async (userId: string, offset: number, tagId: number | null = null): Promise<NoteListItem[]> => {
+    const params: (string | number)[] = [userId]
+    let query: string
+
+    if (tagId) {
+      query = 'SELECT n.id, n.title, LEFT(n.content,100) AS content, n.created_at, n.updated_at FROM notes n INNER JOIN note_tag_map m ON n.id = m.note_id WHERE n.user_id = ? AND m.tag_id = ?'
+      params.push(tagId)
+    } else {
+      query = 'SELECT id, title, LEFT(content,100) AS content, created_at, updated_at FROM notes WHERE user_id = ?'
     }
+
+    query += ' ORDER BY updated_at DESC LIMIT 30 OFFSET ?'
+    params.push(offset * 30)
+
+    const [rows] = await pool.execute<NoteListItem[]>(query, params)
+    return rows
   },
 
   // 获取笔记详情
@@ -437,6 +441,69 @@ export const imageTagData = {
   }
 }
 
+export interface NoteTag extends RowDataPacket {
+  id: number
+  name: string
+  user_id: string
+  created_at: Date
+}
+
+export const noteTagData = {
+  list: async (userId: string): Promise<NoteTag[]> => {
+    const [rows] = await pool.execute<NoteTag[]>(
+      'SELECT * FROM note_tags WHERE user_id = ? ORDER BY name',
+      [userId]
+    )
+    return rows
+  },
+  create: async (name: string, userId: string): Promise<NoteTag> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'INSERT INTO note_tags (name, user_id) VALUES (?, ?)',
+      [name, userId]
+    )
+    const [rows] = await pool.execute<NoteTag[]>(
+      'SELECT * FROM note_tags WHERE id = ?',
+      [result.insertId]
+    )
+    return rows[0]
+  },
+  remove: async (id: number, userId: string): Promise<boolean> => {
+    await pool.execute('DELETE FROM note_tag_map WHERE tag_id = ?', [id])
+    const [result] = await pool.execute<ResultSetHeader>(
+      'DELETE FROM note_tags WHERE id = ? AND user_id = ?',
+      [id, userId]
+    )
+    return result.affectedRows > 0
+  },
+  getTagsForNote: async (noteId: string): Promise<NoteTag[]> => {
+    const [rows] = await pool.execute<NoteTag[]>(
+      'SELECT t.* FROM note_tags t INNER JOIN note_tag_map m ON t.id = m.tag_id WHERE m.note_id = ? ORDER BY t.name',
+      [noteId]
+    )
+    return rows
+  },
+  addTagToNote: async (noteId: string, tagId: number): Promise<boolean> => {
+    try {
+      await pool.execute(
+        'INSERT INTO note_tag_map (note_id, tag_id) VALUES (?, ?)',
+        [noteId, tagId]
+      )
+      return true
+    } catch (e: unknown) {
+      const err = e as { code?: string }
+      if (err.code === 'ER_DUP_ENTRY') return false
+      throw e
+    }
+  },
+  removeTagFromNote: async (noteId: string, tagId: number): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'DELETE FROM note_tag_map WHERE note_id = ? AND tag_id = ?',
+      [noteId, tagId]
+    )
+    return result.affectedRows > 0
+  }
+}
+
 export interface DriveFolder extends RowDataPacket {
   id: string
   name: string
@@ -659,14 +726,218 @@ export const fileData = {
   }
 }
 
+export interface Bookmark extends RowDataPacket {
+  id: number
+  type: string
+  title: string
+  description: string
+  content: string | null
+  url: string
+  ref_id: string | null
+  user_id: string
+  created_at: Date
+}
+
+const BOOKMARK_PAGE_SIZE = 30
+
+export const bookmarkData = {
+  list: async (
+    userId: string,
+    offset: number,
+    sort: 'time' | 'time_desc' | 'name' = 'time_desc',
+    search: string = '',
+    tagId: number | null = null,
+    type: string | null = null
+  ): Promise<Bookmark[]> => {
+    const sortMap: Record<string, string> = {
+      time: 'b.created_at',
+      time_desc: 'b.created_at DESC',
+      name: 'b.title'
+    }
+    const sortSql = sortMap[sort] || 'b.created_at DESC'
+    const params: (string | number)[] = [userId]
+    let query: string
+
+    if (tagId) {
+      query = 'SELECT b.* FROM bookmarks b INNER JOIN bookmark_tag_map m ON b.id = m.bookmark_id WHERE b.user_id = ? AND m.tag_id = ?'
+      params.push(tagId)
+    } else {
+      query = 'SELECT b.* FROM bookmarks b WHERE b.user_id = ?'
+    }
+
+    if (type) {
+      query += ' AND b.type = ?'
+      params.push(type)
+    }
+
+    if (search.trim()) {
+      query += ' AND (b.title LIKE ? OR b.description LIKE ?)'
+      const kw = `%${search.trim()}%`
+      params.push(kw, kw)
+    }
+
+    query += ` ORDER BY ${sortSql} LIMIT ${BOOKMARK_PAGE_SIZE} OFFSET ?`
+    params.push(offset * BOOKMARK_PAGE_SIZE)
+
+    const [rows] = await pool.execute<Bookmark[]>(query, params)
+    return rows
+  },
+  add: async (
+    type: string,
+    title: string,
+    description: string,
+    url: string,
+    refId: string | null,
+    userId: string,
+    content: string | null = null
+  ): Promise<Bookmark> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'INSERT INTO bookmarks (type, title, description, content, url, ref_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [type, title, description, content, url, refId, userId]
+    )
+    const [rows] = await pool.execute<Bookmark[]>(
+      'SELECT * FROM bookmarks WHERE id = ?',
+      [result.insertId]
+    )
+    return rows[0]
+  },
+  getById: async (id: number, userId: string): Promise<Bookmark | null> => {
+    const [rows] = await pool.execute<Bookmark[]>(
+      'SELECT * FROM bookmarks WHERE id = ? AND user_id = ?',
+      [id, userId]
+    )
+    return rows[0] ?? null
+  },
+  remove: async (id: number, userId: string): Promise<boolean> => {
+    await pool.execute('DELETE FROM bookmark_tag_map WHERE bookmark_id = ?', [id])
+    const [result] = await pool.execute<ResultSetHeader>(
+      'DELETE FROM bookmarks WHERE id = ? AND user_id = ?',
+      [id, userId]
+    )
+    return result.affectedRows > 0
+  },
+  findByRef: async (userId: string, type: string, refId: string): Promise<Bookmark | null> => {
+    const [rows] = await pool.execute<Bookmark[]>(
+      'SELECT * FROM bookmarks WHERE user_id = ? AND type = ? AND ref_id = ?',
+      [userId, type, refId]
+    )
+    return rows.length > 0 ? rows[0] : null
+  },
+  findByUrl: async (userId: string, url: string): Promise<Bookmark | null> => {
+    const [rows] = await pool.execute<Bookmark[]>(
+      'SELECT * FROM bookmarks WHERE user_id = ? AND type = ? AND url = ?',
+      [userId, 'url', url]
+    )
+    return rows.length > 0 ? rows[0] : null
+  }
+}
+
+export interface BookmarkTag extends RowDataPacket {
+  id: number
+  name: string
+  user_id: string
+  created_at: Date
+}
+
+export const bookmarkTagData = {
+  list: async (userId: string): Promise<BookmarkTag[]> => {
+    const [rows] = await pool.execute<BookmarkTag[]>(
+      'SELECT * FROM bookmark_tags WHERE user_id = ? ORDER BY name',
+      [userId]
+    )
+    return rows
+  },
+  create: async (name: string, userId: string): Promise<BookmarkTag> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'INSERT INTO bookmark_tags (name, user_id) VALUES (?, ?)',
+      [name, userId]
+    )
+    const [rows] = await pool.execute<BookmarkTag[]>(
+      'SELECT * FROM bookmark_tags WHERE id = ?',
+      [result.insertId]
+    )
+    return rows[0]
+  },
+  remove: async (id: number, userId: string): Promise<boolean> => {
+    await pool.execute('DELETE FROM bookmark_tag_map WHERE tag_id = ?', [id])
+    const [result] = await pool.execute<ResultSetHeader>(
+      'DELETE FROM bookmark_tags WHERE id = ? AND user_id = ?',
+      [id, userId]
+    )
+    return result.affectedRows > 0
+  },
+  getTagsForBookmark: async (bookmarkId: number): Promise<BookmarkTag[]> => {
+    const [rows] = await pool.execute<BookmarkTag[]>(
+      'SELECT t.* FROM bookmark_tags t INNER JOIN bookmark_tag_map m ON t.id = m.tag_id WHERE m.bookmark_id = ? ORDER BY t.name',
+      [bookmarkId]
+    )
+    return rows
+  },
+  addTagToBookmark: async (bookmarkId: number, tagId: number): Promise<boolean> => {
+    try {
+      await pool.execute(
+        'INSERT INTO bookmark_tag_map (bookmark_id, tag_id) VALUES (?, ?)',
+        [bookmarkId, tagId]
+      )
+      return true
+    } catch (e: unknown) {
+      const err = e as { code?: string }
+      if (err.code === 'ER_DUP_ENTRY') return false
+      throw e
+    }
+  },
+  removeTagFromBookmark: async (bookmarkId: number, tagId: number): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'DELETE FROM bookmark_tag_map WHERE bookmark_id = ? AND tag_id = ?',
+      [bookmarkId, tagId]
+    )
+    return result.affectedRows > 0
+  }
+}
+
+export interface UserSetting extends RowDataPacket {
+  user_id: string
+  k: string
+  v: string
+}
+
+export const settingData = {
+  getAll: async (userId: string): Promise<Record<string, string>> => {
+    const [rows] = await pool.execute<UserSetting[]>(
+      'SELECT k, v FROM user_settings WHERE user_id = ?',
+      [userId]
+    )
+    const result: Record<string, string> = {}
+    for (const row of rows) {
+      result[row.k] = row.v
+    }
+    return result
+  },
+  set: async (userId: string, key: string, value: string): Promise<void> => {
+    await pool.execute(
+      'INSERT INTO user_settings (user_id, k, v) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v)',
+      [userId, key, value]
+    )
+  },
+  remove: async (userId: string, key: string): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'DELETE FROM user_settings WHERE user_id = ? AND k = ?',
+      [userId, key]
+    )
+    return result.affectedRows > 0
+  }
+}
+
 export interface TimelineItem extends RowDataPacket {
-  type: 'note' | 'image' | 'file'
+  type: 'note' | 'image' | 'file' | 'bookmark'
   id: string
   name: string
   summary: string
   url: string | null
   size: number
   created_at: Date
+  bookmark_subtype: 'url' | 'image' | 'note' | 'file' | null
+  ref_id: string | null
 }
 
 const TIMELINE_PAGE_SIZE = 30
@@ -674,18 +945,23 @@ const TIMELINE_PAGE_SIZE = 30
 export const timelineData = {
   getTimeline: async (userId: string, offset: number): Promise<TimelineItem[]> => {
     const CI = 'COLLATE utf8mb4_unicode_ci'
+    const nullSubtype = 'CAST(NULL AS CHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci)'
+    const nullRefId = 'CAST(NULL AS CHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci)'
     const [rows] = await pool.execute<TimelineItem[]>(
-      `SELECT 'note' ${CI} AS type, id, title AS name, LEFT(content, 100) AS summary, NULL AS url, 0 AS size, created_at
+      `SELECT 'note' ${CI} AS type, id, title AS name, LEFT(content, 100) AS summary, NULL AS url, 0 AS size, created_at, ${nullSubtype} AS bookmark_subtype, ${nullRefId} AS ref_id
        FROM notes WHERE user_id = ?
        UNION ALL
-       SELECT 'image' ${CI}, CAST(id AS CHAR) ${CI}, name, '' ${CI} AS summary, url, size, created_at
+       SELECT 'image' ${CI}, CAST(id AS CHAR) ${CI}, name, '' ${CI} AS summary, url, size, created_at, ${nullSubtype}, ${nullRefId}
        FROM images WHERE user_id = ?
        UNION ALL
-       SELECT 'file' ${CI}, CAST(id AS CHAR) ${CI}, name, mime_type AS summary, oss_key AS url, size, created_at
+       SELECT 'file' ${CI}, CAST(id AS CHAR) ${CI}, name, mime_type AS summary, oss_key AS url, size, created_at, ${nullSubtype}, ${nullRefId}
        FROM drive_files WHERE user_id = ?
+       UNION ALL
+       SELECT 'bookmark' ${CI}, CAST(b.id AS CHAR) ${CI}, b.title AS name, LEFT(COALESCE(b.description, ''), 100) AS summary, b.url, 0 AS size, b.created_at, b.type ${CI}, b.ref_id
+       FROM bookmarks b WHERE b.user_id = ?
        ORDER BY created_at DESC
        LIMIT ${TIMELINE_PAGE_SIZE} OFFSET ?`,
-      [userId, userId, userId, offset * TIMELINE_PAGE_SIZE]
+      [userId, userId, userId, userId, offset * TIMELINE_PAGE_SIZE]
     )
     return rows
   }

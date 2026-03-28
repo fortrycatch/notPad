@@ -2,22 +2,24 @@
   <v-container class="timeline-page" fluid>
     <div class="row">
       <div class="page-head">
-        <div class="page-icon">
+        <!-- <div class="page-icon">
           <v-icon size="24">mdi-timeline-clock-outline</v-icon>
-        </div>
-        <div>
+        </div> -->
+        <!-- <div>
           <div class="page-title">时间线</div>
           <div class="page-subtitle">记录你的每一次创造</div>
-        </div>
+        </div> -->
       </div>
-      <v-btn
-        variant="tonal"
-        prepend-icon="mdi-refresh"
-        :loading="refreshing"
-        @click="refresh"
-      >
-        刷新
-      </v-btn>
+      <div class="toolbar-actions desktop-toolbar">
+        <v-btn
+          variant="tonal"
+          prepend-icon="mdi-refresh"
+          :loading="refreshing"
+          @click="refresh"
+        >
+          刷新
+        </v-btn>
+      </div>
     </div>
 
     <template v-if="loading && items.length === 0">
@@ -31,12 +33,13 @@
         <v-icon size="64" color="primary" class="mb-4">mdi-clock-outline</v-icon>
         <div class="text-h6 mb-2">还没有任何活动</div>
         <div class="text-body-2 text-medium-emphasis mb-6">
-          创建笔记、上传图片或文件，它们都会出现在这里。
+          创建笔记、上传图片或文件、添加书签，它们都会出现在这里。
         </div>
         <div class="d-flex ga-3 flex-wrap justify-center">
           <v-btn color="primary" prepend-icon="mdi-note-plus" to="/notes">写笔记</v-btn>
           <v-btn variant="tonal" prepend-icon="mdi-image-plus" to="/image">传图片</v-btn>
           <v-btn variant="tonal" prepend-icon="mdi-upload" to="/file">传文件</v-btn>
+          <v-btn variant="tonal" prepend-icon="mdi-bookmark-plus-outline" to="/bookmark">书签</v-btn>
         </div>
       </div>
     </template>
@@ -45,46 +48,76 @@
       <template v-for="(group, gi) in groupedItems" :key="gi">
         <div class="date-label">{{ group.label }}</div>
         <div class="timeline-group">
-          <div
+          <template
             v-for="item in group.items"
             :key="item.type + '-' + item.id"
-            class="timeline-entry"
-            @click="handleClick(item)"
           >
-            <div class="entry-icon" :class="'entry-icon--' + item.type">
-              <v-icon size="20">{{ typeIcon(item.type) }}</v-icon>
+            <div v-if="isMurmur(item)" class="murmur-entry" @click="handleClick(item)">
+              <div class="murmur-content">
+                <v-icon size="16" class="murmur-icon">mdi-flash-outline</v-icon>
+                <span class="murmur-text">{{ displayName(item) }}</span>
+              </div>
+              <span class="murmur-time">{{ formatTime(item.created_at) }}</span>
             </div>
 
-            <div class="entry-body">
-              <div class="entry-header">
-                <span class="entry-name">{{ displayName(item) }}</span>
-                <span class="entry-time">{{ formatTime(item.created_at) }}</span>
+            <div v-else class="timeline-entry" @click="handleClick(item)">
+              <div class="entry-icon" :class="'entry-icon--' + item.type">
+                <v-icon size="20">{{ typeIcon(item) }}</v-icon>
               </div>
 
-              <div v-if="item.type === 'note' && item.summary" class="entry-summary">
-                {{ item.summary }}
-              </div>
+              <div class="entry-body">
+                <div class="entry-header">
+                  <span class="entry-name">{{ displayName(item) }}</span>
+                  <span class="entry-time">{{ formatTime(item.created_at) }}</span>
+                </div>
 
-              <div v-if="item.type === 'image' && item.url" class="entry-thumb">
-                <v-img
-                  :src="imageHost + item.url + '?x-oss-process=image/resize,w_480'"
-                  :alt="item.name"
-                  cover
-                  class="thumb-img"
+                <div v-if="item.type === 'note' && item.summary" class="entry-summary">
+                  {{ item.summary }}
+                </div>
+
+                <div v-if="item.type === 'bookmark' && item.summary" class="entry-summary">
+                  {{ item.summary }}
+                </div>
+
+                <div v-if="item.type === 'image' && item.url" class="entry-thumb">
+                  <v-img
+                    :src="imageHost + item.url + '?x-oss-process=image/resize,w_480'"
+                    :alt="item.name"
+                    cover
+                    class="thumb-img"
+                  >
+                    <template #placeholder>
+                      <div class="d-flex align-center justify-center fill-height">
+                        <v-progress-circular size="20" width="2" indeterminate color="grey" />
+                      </div>
+                    </template>
+                  </v-img>
+                </div>
+
+                <div
+                  v-if="item.type === 'bookmark' && item.bookmark_subtype === 'image' && bookmarkThumbSrc(item.url)"
+                  class="entry-thumb"
                 >
-                  <template #placeholder>
-                    <div class="d-flex align-center justify-center fill-height">
-                      <v-progress-circular size="20" width="2" indeterminate color="grey" />
-                    </div>
-                  </template>
-                </v-img>
-              </div>
+                  <v-img
+                    :src="bookmarkThumbSrc(item.url)"
+                    :alt="item.name"
+                    cover
+                    class="thumb-img"
+                  >
+                    <template #placeholder>
+                      <div class="d-flex align-center justify-center fill-height">
+                        <v-progress-circular size="20" width="2" indeterminate color="grey" />
+                      </div>
+                    </template>
+                  </v-img>
+                </div>
 
-              <div v-if="item.size > 0" class="entry-meta">
-                {{ formatSize(item.size) }}
+                <div v-if="item.size > 0" class="entry-meta">
+                  {{ formatSize(item.size) }}
+                </div>
               </div>
             </div>
-          </div>
+          </template>
         </div>
       </template>
 
@@ -97,21 +130,50 @@
       </div>
     </template>
   </v-container>
+
+  <div class="mobile-toolbar">
+    <v-btn variant="text" prepend-icon="mdi-refresh" :loading="refreshing" @click="refresh">
+      刷新
+    </v-btn>
+  </div>
+
+  <ImagePreviewDialog
+    v-model="showImagePreview"
+    :image-url="previewImageUrl"
+    :image-name="previewImageName"
+    :image-id="previewImageId"
+    :image-size="previewImageSize"
+    :image-date="previewImageDate"
+  />
+
+  <FileDownloadDialog
+    v-model="showFileDialog"
+    :file-name="fileDialogName"
+    :file-url="fileDialogUrl"
+    :file-size="fileDialogSize"
+    :mime-type="fileDialogMimeType"
+  />
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { server } from '../server'
+import ImagePreviewDialog from '../components/compose/ImagePreviewDialog.vue'
+import FileDownloadDialog from '../components/compose/FileDownloadDialog.vue'
+
+type BookmarkSubtype = 'url' | 'image' | 'note' | 'file'
 
 interface TimelineItem {
-  type: 'note' | 'image' | 'file'
+  type: 'note' | 'image' | 'file' | 'bookmark'
   id: string
   name: string
   summary: string
   url: string | null
   size: number
   created_at: string
+  bookmark_subtype?: BookmarkSubtype | null
+  ref_id?: string | null
 }
 
 interface TimelineGroup {
@@ -171,10 +233,29 @@ const toDateKey = (d: Date) => {
   return `${y}-${m}-${day}`
 }
 
-const typeIcon = (type: string) => {
-  if (type === 'note') return 'mdi-note-text-outline'
-  if (type === 'image') return 'mdi-image-outline'
+const isMurmur = (item: TimelineItem) => item.type === 'note' && !item.summary
+
+const typeIcon = (item: TimelineItem) => {
+  if (item.type === 'bookmark') {
+    const sub = item.bookmark_subtype
+    if (sub === 'url') return 'mdi-web'
+    if (sub === 'image') return 'mdi-image-outline'
+    if (sub === 'note') return 'mdi-note-text-outline'
+    if (sub === 'file') return 'mdi-file-outline'
+    return 'mdi-bookmark-multiple-outline'
+  }
+  if (item.type === 'note') return 'mdi-note-text-outline'
+  if (item.type === 'image') return 'mdi-image-outline'
   return 'mdi-file-outline'
+}
+
+const bookmarkThumbSrc = (url: string | null) => {
+  if (!url?.trim()) return ''
+  const t = url.trim()
+  const full = t.startsWith('http://') || t.startsWith('https://') ? t : imageHost + t.replace(/^\//, '')
+  if (!full.includes('monika.jkloli.net')) return full
+  const sep = full.includes('?') ? '&' : '?'
+  return `${full}${sep}x-oss-process=image/resize,w_480`
 }
 
 const displayName = (item: TimelineItem) => {
@@ -232,13 +313,79 @@ const refresh = async () => {
   refreshing.value = false
 }
 
-const handleClick = (item: TimelineItem) => {
+const showImagePreview = ref(false)
+const previewImageUrl = ref('')
+const previewImageName = ref('')
+const previewImageId = ref(0)
+const previewImageSize = ref(0)
+const previewImageDate = ref('')
+
+const showFileDialog = ref(false)
+const fileDialogName = ref('')
+const fileDialogUrl = ref('')
+const fileDialogSize = ref(0)
+const fileDialogMimeType = ref('')
+
+const resolveBookmarkImageUrl = (url: string) => {
+  const t = url.trim()
+  if (t.startsWith('http://') || t.startsWith('https://')) return t
+  return imageHost + t.replace(/^\//, '')
+}
+
+const handleClick = async (item: TimelineItem) => {
   if (item.type === 'note') {
-    router.push({ path: '/notes', query: { id: item.id } })
-  } else if (item.type === 'image') {
-    router.push('/image')
-  } else {
-    router.push('/file')
+    router.push(`/note/${item.id}`)
+    return
+  }
+
+  if (item.type === 'bookmark') {
+    const sub = item.bookmark_subtype
+    if (sub === 'note' && item.ref_id) {
+      router.push(`/note/${item.ref_id}`)
+      return
+    }
+    if (sub === 'image' && item.url) {
+      previewImageUrl.value = resolveBookmarkImageUrl(item.url)
+      previewImageName.value = displayName(item)
+      previewImageId.value = item.ref_id ? Number(item.ref_id) : 0
+      previewImageSize.value = 0
+      previewImageDate.value = item.created_at
+      showImagePreview.value = true
+      return
+    }
+    if (sub === 'file' && item.url) {
+      fileDialogName.value = displayName(item)
+      fileDialogUrl.value = item.url
+      fileDialogSize.value = 0
+      fileDialogMimeType.value = ''
+      showFileDialog.value = true
+      return
+    }
+    router.push(`/bookmark/${item.id}`)
+    return
+  }
+
+  if (item.type === 'image' && item.url) {
+    previewImageUrl.value = imageHost + item.url
+    previewImageName.value = displayName(item)
+    previewImageId.value = Number(item.id)
+    previewImageSize.value = item.size
+    previewImageDate.value = item.created_at
+    showImagePreview.value = true
+    return
+  }
+
+  if (item.type === 'file') {
+    fileDialogName.value = displayName(item)
+    fileDialogSize.value = item.size
+    fileDialogMimeType.value = item.summary
+    fileDialogUrl.value = ''
+    showFileDialog.value = true
+    try {
+      const result = await server.file_drive.getDownloadUrl.query({ file_id: Number(item.id) })
+      fileDialogUrl.value = result.url
+    } catch { /* download button stays disabled */ }
+    return
   }
 }
 
@@ -391,6 +538,11 @@ onUnmounted(() => {
   color: #ff9800;
 }
 
+.entry-icon--bookmark {
+  background: rgba(156, 39, 176, 0.12);
+  color: #9c27b0;
+}
+
 .entry-body {
   flex: 1;
   min-width: 0;
@@ -457,7 +609,69 @@ onUnmounted(() => {
   padding: 24px 0;
 }
 
-@media (max-width: 600px) {
+.murmur-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 20px;
+  background: rgba(var(--v-theme-primary), 0.08);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.murmur-entry:hover {
+  background: rgba(var(--v-theme-primary), 0.14);
+}
+
+.murmur-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.murmur-icon {
+  flex-shrink: 0;
+  color: rgb(var(--v-theme-primary));
+}
+
+.murmur-text {
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.murmur-time {
+  font-size: 12px;
+  color: rgb(var(--v-theme-on-surface-variant));
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.mobile-toolbar {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .desktop-toolbar {
+    display: none;
+  }
+
+  .timeline-page {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
+  }
+
   .page-title {
     font-size: 22px;
   }
@@ -472,6 +686,28 @@ onUnmounted(() => {
 
   .entry-thumb {
     max-width: 100%;
+  }
+
+  .mobile-toolbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    background: rgba(var(--v-theme-surface), 0.96);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  }
+
+  .mobile-toolbar > * {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }
 </style>

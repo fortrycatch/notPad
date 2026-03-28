@@ -9,7 +9,7 @@
       <v-card-title class="resource-picker__header">
         <div>
           <div class="text-h6">选择资源</div>
-          <div class="resource-picker__subtitle">可选择图片、网盘文件或笔记。</div>
+          <div class="resource-picker__subtitle">可选择图片、网盘文件、笔记或书签。</div>
         </div>
         <v-btn
           icon="mdi-close"
@@ -18,11 +18,12 @@
         />
       </v-card-title>
 
-      <v-card-text class="resource-picker__body">
+      <v-card-text class="resource-picker__body" @scroll.passive="onPickerScroll">
         <v-tabs v-model="activeTab" color="primary" grow>
           <v-tab value="image">图片</v-tab>
           <v-tab value="file">文件</v-tab>
           <v-tab value="note">笔记</v-tab>
+          <v-tab value="bookmark">书签</v-tab>
         </v-tabs>
 
         <div v-if="feedbackMessage" class="resource-picker__feedback">
@@ -60,10 +61,31 @@
               variant="tonal"
               prepend-icon="mdi-refresh"
               :loading="imageLoading"
-              @click="loadImages"
+              @click="loadImages(true)"
             >
               刷新
             </v-btn>
+          </div>
+
+          <div v-if="imageTagList.length > 0" class="resource-tag-row">
+            <v-chip
+              :color="imageActiveTagId === null ? 'primary' : undefined"
+              :variant="imageActiveTagId === null ? 'elevated' : 'outlined'"
+              size="small"
+              @click="imageActiveTagId = null"
+            >
+              全部
+            </v-chip>
+            <v-chip
+              v-for="tag in imageTagList"
+              :key="tag.id"
+              size="small"
+              :color="imageActiveTagId === tag.id ? 'primary' : undefined"
+              :variant="imageActiveTagId === tag.id ? 'elevated' : 'outlined'"
+              @click="imageActiveTagId = tag.id"
+            >
+              {{ tag.name }}
+            </v-chip>
           </div>
 
           <div class="upload-box">
@@ -85,37 +107,42 @@
             </v-btn>
           </div>
 
-          <div v-if="imageLoading" class="resource-empty">
+          <div v-if="imageLoading && imageList.length === 0" class="resource-empty">
             <v-progress-circular indeterminate color="primary" />
             <span>正在加载图片...</span>
           </div>
           <div v-else-if="imageList.length === 0" class="resource-empty">
             <v-icon size="40" color="primary">mdi-image-off-outline</v-icon>
-            <span>暂无图片</span>
+            <span>{{ imageEmptyHint }}</span>
           </div>
-          <div v-else class="image-grid">
-            <v-card
-              v-for="image in imageList"
-              :key="image.url"
-              class="image-item"
-              hover
-              @click="selectImage(image)"
-            >
-              <v-img
-                :src="getImageUrl(image.url)"
-                :alt="image.name"
-                class="image-item__preview"
-                cover
-              />
-              <div class="image-item__meta">
-                <div class="image-item__title">{{ getBaseName(image.name) }}</div>
-                <div class="image-item__sub">
-                  <span>{{ formatFileSize(image.size) }}</span>
-                  <span>{{ formatDate(image.created_at) }}</span>
+          <template v-else>
+            <div class="image-grid">
+              <v-card
+                v-for="image in imageList"
+                :key="image.url"
+                class="image-item"
+                hover
+                @click="selectImage(image)"
+              >
+                <v-img
+                  :src="getImageUrl(image.url)"
+                  :alt="image.name"
+                  class="image-item__preview"
+                  cover
+                />
+                <div class="image-item__meta">
+                  <div class="image-item__title">{{ getBaseName(image.name) }}</div>
+                  <div class="image-item__sub">
+                    <span>{{ formatFileSize(image.size) }}</span>
+                    <span>{{ formatDate(image.created_at) }}</span>
+                  </div>
                 </div>
-              </div>
-            </v-card>
-          </div>
+              </v-card>
+            </div>
+            <div v-if="imageLoadingMore" class="resource-load-more">
+              <v-progress-circular indeterminate color="primary" size="28" />
+            </div>
+          </template>
         </div>
 
         <div v-else-if="activeTab === 'file'" class="resource-panel">
@@ -141,7 +168,7 @@
               variant="tonal"
               prepend-icon="mdi-refresh"
               :loading="fileLoading"
-              @click="loadFiles"
+              @click="loadFiles(true)"
             >
               刷新
             </v-btn>
@@ -189,7 +216,7 @@
             </template>
           </div>
 
-          <div v-if="fileLoading" class="resource-empty">
+          <div v-if="fileLoading && fileFolders.length === 0 && fileList.length === 0" class="resource-empty">
             <v-progress-circular indeterminate color="primary" />
             <span>正在加载文件...</span>
           </div>
@@ -197,48 +224,53 @@
             <v-icon size="40" color="primary">mdi-folder-open-outline</v-icon>
             <span>{{ fileSearch.trim() ? '没有匹配的内容' : '当前目录为空' }}</span>
           </div>
-          <v-list v-else lines="two" class="note-list">
-            <v-list-item
-              v-for="folder in fileFolders"
-              :key="folder.id"
-              class="note-item"
-              @click="openDriveFolder(folder.id)"
-            >
-              <template #prepend>
-                <v-avatar size="36" color="primary" variant="tonal">
-                  <v-icon size="18">mdi-folder</v-icon>
-                </v-avatar>
-              </template>
-              <v-list-item-title class="note-item__title">
-                {{ folder.name }}
-              </v-list-item-title>
-              <v-list-item-subtitle class="note-item__content">
-                文件夹 · {{ formatDate(folder.created_at) }}
-              </v-list-item-subtitle>
-            </v-list-item>
+          <template v-else>
+            <v-list lines="two" class="note-list">
+              <v-list-item
+                v-for="folder in fileFolders"
+                :key="folder.id"
+                class="note-item"
+                @click="openDriveFolder(folder.id)"
+              >
+                <template #prepend>
+                  <v-avatar size="36" color="primary" variant="tonal">
+                    <v-icon size="18">mdi-folder</v-icon>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="note-item__title">
+                  {{ folder.name }}
+                </v-list-item-title>
+                <v-list-item-subtitle class="note-item__content">
+                  文件夹 · {{ formatDate(folder.created_at) }}
+                </v-list-item-subtitle>
+              </v-list-item>
 
-            <v-list-item
-              v-for="file in fileList"
-              :key="file.id"
-              class="note-item"
-              @click="selectFile(file)"
-            >
-              <template #prepend>
-                <v-avatar size="36" color="surface-variant" variant="flat">
-                  <v-icon size="18">{{ getFileIcon(file.mime_type) }}</v-icon>
-                </v-avatar>
-              </template>
-              <v-list-item-title class="note-item__title">
-                {{ file.name }}
-              </v-list-item-title>
-              <v-list-item-subtitle class="note-item__content">
-                {{ formatFileSize(file.size) }} · {{ formatDate(file.created_at) }}
-              </v-list-item-subtitle>
-            </v-list-item>
-          </v-list>
+              <v-list-item
+                v-for="file in fileList"
+                :key="file.id"
+                class="note-item"
+                @click="selectFile(file)"
+              >
+                <template #prepend>
+                  <v-avatar size="36" color="surface-variant" variant="flat">
+                    <v-icon size="18">{{ getFileIcon(file.mime_type) }}</v-icon>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="note-item__title">
+                  {{ file.name }}
+                </v-list-item-title>
+                <v-list-item-subtitle class="note-item__content">
+                  {{ formatFileSize(file.size) }} · {{ formatDate(file.created_at) }}
+                </v-list-item-subtitle>
+              </v-list-item>
+            </v-list>
+            <div v-if="fileLoadingMore" class="resource-load-more">
+              <v-progress-circular indeterminate color="primary" size="28" />
+            </div>
+          </template>
         </div>
 
-        <div v-else class="resource-panel">
+        <div v-else-if="activeTab === 'note'" class="resource-panel">
           <div class="resource-toolbar">
             <v-text-field
               v-model="noteSearch"
@@ -259,37 +291,151 @@
             </v-btn>
           </div>
 
-          <div v-if="noteLoading" class="resource-empty">
+          <div v-if="noteTagList.length > 0" class="resource-tag-row">
+            <v-chip
+              :color="noteActiveTagId === null ? 'primary' : undefined"
+              :variant="noteActiveTagId === null ? 'elevated' : 'outlined'"
+              size="small"
+              @click="noteActiveTagId = null"
+            >
+              全部
+            </v-chip>
+            <v-chip
+              v-for="tag in noteTagList"
+              :key="tag.id"
+              size="small"
+              :color="noteActiveTagId === tag.id ? 'primary' : undefined"
+              :variant="noteActiveTagId === tag.id ? 'elevated' : 'outlined'"
+              @click="noteActiveTagId = tag.id"
+            >
+              {{ tag.name }}
+            </v-chip>
+          </div>
+
+          <div v-if="noteLoading && notes.length === 0" class="resource-empty">
             <v-progress-circular indeterminate color="primary" />
             <span>正在加载笔记...</span>
           </div>
           <div v-else-if="filteredNotes.length === 0" class="resource-empty">
             <v-icon size="40" color="primary">mdi-note-search-outline</v-icon>
-            <span>{{ noteSearch.trim() ? '没有匹配的笔记' : '暂无笔记' }}</span>
+            <span>{{ noteEmptyHint }}</span>
           </div>
-          <v-list v-else lines="three" class="note-list">
-            <v-list-item
-              v-for="note in filteredNotes"
-              :key="note.id"
-              class="note-item"
-              @click="selectNote(note)"
+          <template v-else>
+            <v-list lines="three" class="note-list">
+              <v-list-item
+                v-for="note in filteredNotes"
+                :key="note.id"
+                class="note-item"
+                @click="selectNote(note)"
+              >
+                <template #prepend>
+                  <v-avatar size="36" color="primary" variant="tonal">
+                    <v-icon size="18">mdi-note-text-outline</v-icon>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="note-item__title">
+                  {{ note.title || '未命名笔记' }}
+                </v-list-item-title>
+                <v-list-item-subtitle class="note-item__content">
+                  {{ note.content || '暂无摘要' }}
+                </v-list-item-subtitle>
+                <template #append>
+                  <div class="note-item__time">{{ formatDate(note.updated_at) }}</div>
+                </template>
+              </v-list-item>
+            </v-list>
+            <div v-if="noteLoadingMore" class="resource-load-more">
+              <v-progress-circular indeterminate color="primary" size="28" />
+            </div>
+          </template>
+        </div>
+
+        <div v-else class="resource-panel">
+          <div class="resource-toolbar resource-toolbar--bookmark">
+            <v-text-field
+              v-model="bookmarkSearch"
+              label="搜索书签"
+              placeholder="标题或描述"
+              prepend-inner-icon="mdi-magnify"
+              variant="filled"
+              density="comfortable"
+              hide-details
+            />
+            <v-select
+              v-model="bookmarkSort"
+              :items="sortOptions"
+              label="排序"
+              variant="filled"
+              density="comfortable"
+              hide-details
+            />
+            <v-btn
+              variant="tonal"
+              prepend-icon="mdi-refresh"
+              :loading="bookmarkLoading"
+              @click="loadBookmarks(true)"
             >
-              <template #prepend>
-                <v-avatar size="36" color="primary" variant="tonal">
-                  <v-icon size="18">mdi-note-text-outline</v-icon>
-                </v-avatar>
-              </template>
-              <v-list-item-title class="note-item__title">
-                {{ note.title || '未命名笔记' }}
-              </v-list-item-title>
-              <v-list-item-subtitle class="note-item__content">
-                {{ note.content || '暂无摘要' }}
-              </v-list-item-subtitle>
-              <template #append>
-                <div class="note-item__time">{{ formatDate(note.updated_at) }}</div>
-              </template>
-            </v-list-item>
-          </v-list>
+              刷新
+            </v-btn>
+          </div>
+
+          <div v-if="bookmarkTagList.length > 0" class="resource-tag-row">
+            <v-chip
+              :color="bookmarkActiveTagId === null ? 'primary' : undefined"
+              :variant="bookmarkActiveTagId === null ? 'elevated' : 'outlined'"
+              size="small"
+              @click="bookmarkActiveTagId = null"
+            >
+              全部
+            </v-chip>
+            <v-chip
+              v-for="tag in bookmarkTagList"
+              :key="tag.id"
+              size="small"
+              :color="bookmarkActiveTagId === tag.id ? 'primary' : undefined"
+              :variant="bookmarkActiveTagId === tag.id ? 'elevated' : 'outlined'"
+              @click="bookmarkActiveTagId = tag.id"
+            >
+              {{ tag.name }}
+            </v-chip>
+          </div>
+
+          <div v-if="bookmarkLoading && bookmarkList.length === 0" class="resource-empty">
+            <v-progress-circular indeterminate color="primary" />
+            <span>正在加载书签...</span>
+          </div>
+          <div v-else-if="bookmarkList.length === 0" class="resource-empty">
+            <v-icon size="40" color="primary">mdi-bookmark-off-outline</v-icon>
+            <span>{{ bookmarkEmptyHint }}</span>
+          </div>
+          <template v-else>
+            <v-list lines="three" class="note-list">
+              <v-list-item
+                v-for="bm in bookmarkList"
+                :key="bm.id"
+                class="note-item"
+                @click="selectBookmark(bm)"
+              >
+                <template #prepend>
+                  <v-avatar size="36" color="primary" variant="tonal">
+                    <v-icon size="18">{{ bookmarkTypeIcon(bm.type) }}</v-icon>
+                  </v-avatar>
+                </template>
+                <v-list-item-title class="note-item__title">
+                  {{ bm.title || '未命名书签' }}
+                </v-list-item-title>
+                <v-list-item-subtitle class="note-item__content">
+                  {{ bm.description || bm.url || '暂无摘要' }}
+                </v-list-item-subtitle>
+                <template #append>
+                  <div class="note-item__time">{{ formatDate(bm.created_at) }}</div>
+                </template>
+              </v-list-item>
+            </v-list>
+            <div v-if="bookmarkLoadingMore" class="resource-load-more">
+              <v-progress-circular indeterminate color="primary" size="28" />
+            </div>
+          </template>
         </div>
       </v-card-text>
     </v-card>
@@ -301,8 +447,13 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { trpc } from '../../trpc'
 import { putWithUploadProgress } from '../../utils/putWithUploadProgress'
 
-type ResourceTab = 'image' | 'note' | 'file'
+type ResourceTab = 'image' | 'note' | 'file' | 'bookmark'
 type ResourceSort = 'time_desc' | 'time' | 'name'
+
+interface TagItem {
+  id: number
+  name: string
+}
 
 interface ImageItem {
   id?: number
@@ -339,6 +490,16 @@ interface DriveFileItem {
   public_url: string
 }
 
+interface BookmarkListItem {
+  id: number
+  type: 'url' | 'image' | 'note' | 'file'
+  title: string
+  description: string
+  url: string
+  ref_id: string | null
+  created_at: string | Date
+}
+
 const props = withDefaults(defineProps<{
   modelValue: boolean
   defaultTab?: ResourceTab
@@ -348,22 +509,36 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
-  (e: 'select', payload: { type: 'image'; item: ImageItem } | { type: 'note'; item: NoteItem } | { type: 'file'; item: DriveFileItem }): void
+  (e: 'select', payload:
+    | { type: 'image'; item: ImageItem }
+    | { type: 'note'; item: NoteItem }
+    | { type: 'file'; item: DriveFileItem }
+    | { type: 'bookmark'; item: BookmarkListItem }
+  ): void
 }>()
 
 const IMAGE_HOST = 'https://monika.jkloli.net/'
 const NOTE_PAGE_SIZE = 30
-
+const IMAGE_PAGE_SIZE = 30
+const BOOKMARK_PAGE_SIZE = 30
 const activeTab = ref<ResourceTab>(props.defaultTab)
 const imageSearch = ref('')
 const imageSort = ref<ResourceSort>('time_desc')
+const imageActiveTagId = ref<number | null>(null)
+const imageTagList = ref<TagItem[]>([])
 const imageLoading = ref(false)
+const imageLoadingMore = ref(false)
+const imageHasMore = ref(false)
+const imageNextOffset = ref(0)
 const imageList = ref<ImageItem[]>([])
 const imageUploadFile = ref<File | File[] | null>(null)
 const uploadingImage = ref(false)
 const fileSearch = ref('')
 const fileSort = ref<ResourceSort>('time_desc')
 const fileLoading = ref(false)
+const fileLoadingMore = ref(false)
+const fileListHasMore = ref(false)
+const fileDriveNextOffset = ref(0)
 const fileFolders = ref<DriveFolder[]>([])
 const fileList = ref<DriveFileItem[]>([])
 const fileBreadcrumbs = ref<DriveFolder[]>([])
@@ -372,13 +547,28 @@ const driveUploadFile = ref<File | File[] | null>(null)
 const uploadingDriveFile = ref(false)
 const driveUploadPercent = ref(0)
 const noteSearch = ref('')
+const noteActiveTagId = ref<number | null>(null)
+const noteTagList = ref<TagItem[]>([])
 const noteLoading = ref(false)
-const notesLoaded = ref(false)
+const noteLoadingMore = ref(false)
+const noteHasMore = ref(false)
+const noteNextPage = ref(0)
 const notes = ref<NoteItem[]>([])
 const feedbackMessage = ref('')
 const feedbackType = ref<'success' | 'warning' | 'error'>('success')
 const suspendImageReload = ref(false)
 const suspendFileReload = ref(false)
+const suspendBookmarkReload = ref(false)
+const suspendNoteReload = ref(false)
+const bookmarkSearch = ref('')
+const bookmarkSort = ref<ResourceSort>('time_desc')
+const bookmarkActiveTagId = ref<number | null>(null)
+const bookmarkTagList = ref<TagItem[]>([])
+const bookmarkLoading = ref(false)
+const bookmarkLoadingMore = ref(false)
+const bookmarkHasMore = ref(false)
+const bookmarkNextOffset = ref(0)
+const bookmarkList = ref<BookmarkListItem[]>([])
 
 const sortOptions = [
   { title: '最新优先', value: 'time_desc' },
@@ -395,6 +585,33 @@ const filteredNotes = computed(() => {
   })
 })
 
+const imageEmptyHint = computed(() => {
+  if (imageSearch.value.trim() || imageActiveTagId.value !== null) {
+    return '没有匹配的图片'
+  }
+  return '暂无图片'
+})
+
+const noteEmptyHint = computed(() => {
+  if (noteSearch.value.trim()) {
+    return '没有匹配的笔记'
+  }
+  if (noteActiveTagId.value !== null) {
+    return '该标签下暂无笔记'
+  }
+  return '暂无笔记'
+})
+
+const bookmarkEmptyHint = computed(() => {
+  if (bookmarkSearch.value.trim()) {
+    return '没有匹配的书签'
+  }
+  if (bookmarkActiveTagId.value !== null) {
+    return '该标签下暂无书签'
+  }
+  return '暂无书签'
+})
+
 const setFeedback = (message: string, type: 'success' | 'warning' | 'error' = 'success') => {
   feedbackMessage.value = message
   feedbackType.value = type
@@ -403,8 +620,11 @@ const setFeedback = (message: string, type: 'success' | 'warning' | 'error' = 's
 const clearTransientState = () => {
   suspendImageReload.value = true
   suspendFileReload.value = true
+  suspendBookmarkReload.value = true
+  suspendNoteReload.value = true
   imageSearch.value = ''
   imageSort.value = 'time_desc'
+  imageActiveTagId.value = null
   imageUploadFile.value = null
   fileSearch.value = ''
   fileSort.value = 'time_desc'
@@ -415,10 +635,16 @@ const clearTransientState = () => {
   driveUploadFile.value = null
   driveUploadPercent.value = 0
   noteSearch.value = ''
+  noteActiveTagId.value = null
+  bookmarkSearch.value = ''
+  bookmarkSort.value = 'time_desc'
+  bookmarkActiveTagId.value = null
   feedbackMessage.value = ''
   window.setTimeout(() => {
     suspendImageReload.value = false
     suspendFileReload.value = false
+    suspendBookmarkReload.value = false
+    suspendNoteReload.value = false
   }, 0)
 }
 
@@ -461,92 +687,258 @@ const getFileIcon = (mimeType: string) => {
   return 'mdi-file-outline'
 }
 
-const loadImages = async () => {
+const bookmarkTypeIcon = (t: string) => {
+  if (t === 'url') return 'mdi-web'
+  if (t === 'image') return 'mdi-image-outline'
+  if (t === 'note') return 'mdi-note-text-outline'
+  if (t === 'file') return 'mdi-file-outline'
+  return 'mdi-bookmark-outline'
+}
+
+const loadPickerTags = async () => {
   try {
+    const [img, note, bm] = await Promise.all([
+      trpc.image_bed.listTags.query(),
+      trpc.notepad.listTags.query(),
+      trpc.bookmark.listTags.query()
+    ])
+    imageTagList.value = img as TagItem[]
+    noteTagList.value = note as TagItem[]
+    bookmarkTagList.value = bm as TagItem[]
+  } catch (error) {
+    console.error('加载标签失败:', error)
+    setFeedback('加载标签失败，请稍后重试', 'error')
+  }
+}
+
+const loadImages = async (reset: boolean) => {
+  if (reset) {
+    if (imageLoading.value) return
     imageLoading.value = true
-    imageList.value = await trpc.image_bed.list.query({
+    imageList.value = []
+    imageNextOffset.value = 0
+    imageHasMore.value = true
+  } else {
+    if (!imageHasMore.value || imageLoadingMore.value || imageLoading.value) return
+    imageLoadingMore.value = true
+  }
+
+  const offset = reset ? 0 : imageNextOffset.value
+
+  try {
+    const rows = await trpc.image_bed.list.query({
       user_id: 'admin',
-      offset: 0,
+      offset,
       sort: imageSort.value,
-      search: imageSearch.value.trim()
+      search: imageSearch.value.trim(),
+      tag_id: imageActiveTagId.value
     }) as ImageItem[]
+
+    if (reset) {
+      imageList.value = rows
+    } else {
+      imageList.value.push(...rows)
+    }
+
+    imageHasMore.value = rows.length >= IMAGE_PAGE_SIZE
+    if (imageHasMore.value) {
+      imageNextOffset.value = offset + 1
+    }
   } catch (error) {
     console.error('加载图片失败:', error)
     setFeedback('加载图片失败，请稍后重试', 'error')
   } finally {
     imageLoading.value = false
+    imageLoadingMore.value = false
   }
 }
 
-const loadFiles = async () => {
-  try {
+const loadFiles = async (reset: boolean) => {
+  if (reset) {
+    if (fileLoading.value) return
     fileLoading.value = true
+    fileFolders.value = []
+    fileList.value = []
+    fileDriveNextOffset.value = 0
+    fileListHasMore.value = true
+  } else {
+    if (!fileListHasMore.value || fileLoadingMore.value || fileLoading.value) return
+    fileLoadingMore.value = true
+  }
+
+  const offset = reset ? 0 : fileDriveNextOffset.value
+
+  try {
     const result = await trpc.file_drive.list.query({
       folder_id: currentFileFolderId.value,
-      offset: 0,
+      offset,
       sort: fileSort.value,
       search: fileSearch.value.trim()
     }) as {
       breadcrumbs: DriveFolder[]
       folders: DriveFolder[]
       files: DriveFileItem[]
+      hasMore: boolean
     }
 
-    fileBreadcrumbs.value = result.breadcrumbs
-    fileFolders.value = result.folders
-    fileList.value = result.files
+    if (reset) {
+      fileBreadcrumbs.value = result.breadcrumbs
+      fileFolders.value = result.folders
+      fileList.value = result.files
+    } else {
+      fileFolders.value.push(...result.folders)
+      fileList.value.push(...result.files)
+    }
+
+    fileListHasMore.value = result.hasMore
+    if (result.hasMore) {
+      fileDriveNextOffset.value = offset + 1
+    }
   } catch (error) {
     console.error('加载文件失败:', error)
     setFeedback('加载文件失败，请稍后重试', 'error')
   } finally {
     fileLoading.value = false
+    fileLoadingMore.value = false
   }
 }
 
-const loadNotes = async (force = false) => {
-  if (noteLoading.value) return
-  if (notesLoaded.value && !force) return
+const loadNotes = async (reset: boolean) => {
+  if (reset) {
+    if (noteLoading.value) return
+    noteLoading.value = true
+    notes.value = []
+    noteNextPage.value = 0
+    noteHasMore.value = true
+  } else {
+    if (!noteHasMore.value || noteLoadingMore.value || noteLoading.value) return
+    noteLoadingMore.value = true
+  }
+
+  const page = reset ? 0 : noteNextPage.value
 
   try {
-    noteLoading.value = true
-    let page = 0
-    const allNotes: NoteItem[] = []
+    const result = await trpc.notepad.getNotes.query({
+      page,
+      tag_id: noteActiveTagId.value
+    }) as NoteItem[]
 
-    while (true) {
-      const result = await trpc.notepad.getNotes.query(page) as NoteItem[]
-      allNotes.push(...result)
-
-      if (result.length < NOTE_PAGE_SIZE) {
-        break
-      }
-
-      page += 1
+    if (reset) {
+      notes.value = result
+    } else {
+      notes.value.push(...result)
     }
 
-    notes.value = allNotes
-    notesLoaded.value = true
+    noteHasMore.value = result.length >= NOTE_PAGE_SIZE
+    if (noteHasMore.value) {
+      noteNextPage.value = page + 1
+    }
   } catch (error) {
     console.error('加载笔记失败:', error)
     setFeedback('加载笔记失败，请稍后重试', 'error')
   } finally {
     noteLoading.value = false
+    noteLoadingMore.value = false
   }
+}
+
+const loadBookmarks = async (reset: boolean) => {
+  if (reset) {
+    if (bookmarkLoading.value) return
+    bookmarkLoading.value = true
+    bookmarkList.value = []
+    bookmarkNextOffset.value = 0
+    bookmarkHasMore.value = true
+  } else {
+    if (!bookmarkHasMore.value || bookmarkLoadingMore.value || bookmarkLoading.value) return
+    bookmarkLoadingMore.value = true
+  }
+
+  const offset = reset ? 0 : bookmarkNextOffset.value
+
+  try {
+    const rows = await trpc.bookmark.list.query({
+      offset,
+      sort: bookmarkSort.value,
+      search: bookmarkSearch.value.trim(),
+      tag_id: bookmarkActiveTagId.value
+    }) as BookmarkListItem[]
+
+    if (reset) {
+      bookmarkList.value = rows
+    } else {
+      bookmarkList.value.push(...rows)
+    }
+
+    bookmarkHasMore.value = rows.length >= BOOKMARK_PAGE_SIZE
+    if (bookmarkHasMore.value) {
+      bookmarkNextOffset.value = offset + 1
+    }
+  } catch (error) {
+    console.error('加载书签失败:', error)
+    setFeedback('加载书签失败，请稍后重试', 'error')
+  } finally {
+    bookmarkLoading.value = false
+    bookmarkLoadingMore.value = false
+  }
+}
+
+const loadMoreForActiveTab = async () => {
+  if (!props.modelValue) return
+
+  if (activeTab.value === 'image') {
+    await loadImages(false)
+    return
+  }
+
+  if (activeTab.value === 'file') {
+    await loadFiles(false)
+    return
+  }
+
+  if (activeTab.value === 'note') {
+    await loadNotes(false)
+    return
+  }
+
+  if (activeTab.value === 'bookmark') {
+    await loadBookmarks(false)
+  }
+}
+
+const scrollLoadBusy = ref(false)
+
+const onPickerScroll = (e: Event) => {
+  const el = e.target as HTMLElement
+  if (!el?.scrollHeight) return
+  const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 180
+  if (!nearBottom) return
+  if (scrollLoadBusy.value) return
+  scrollLoadBusy.value = true
+  void loadMoreForActiveTab().finally(() => {
+    scrollLoadBusy.value = false
+  })
 }
 
 const ensureActiveTabData = async () => {
   if (!props.modelValue) return
 
   if (activeTab.value === 'image') {
-    await loadImages()
+    await loadImages(true)
     return
   }
 
   if (activeTab.value === 'file') {
-    await loadFiles()
+    await loadFiles(true)
     return
   }
 
-  await loadNotes()
+  if (activeTab.value === 'note') {
+    await loadNotes(true)
+    return
+  }
+
+  await loadBookmarks(true)
 }
 
 const selectImage = (image: ImageItem) => {
@@ -564,9 +956,14 @@ const selectNote = (note: NoteItem) => {
   emit('update:modelValue', false)
 }
 
+const selectBookmark = (bm: BookmarkListItem) => {
+  emit('select', { type: 'bookmark', item: bm })
+  emit('update:modelValue', false)
+}
+
 const openDriveFolder = async (folderId: string | null) => {
   currentFileFolderId.value = folderId
-  await loadFiles()
+  await loadFiles(true)
 }
 
 const uploadImage = async () => {
@@ -605,7 +1002,7 @@ const uploadImage = async () => {
       remark: ''
     })
 
-    await loadImages()
+    await loadImages(true)
     setFeedback('图片上传成功，已插入当前内容', 'success')
     selectImage(selectedImage)
   } catch (error) {
@@ -648,7 +1045,7 @@ const uploadDriveFileAndSelect = async () => {
       mime_type: mimeType
     }) as DriveFileItem
 
-    await loadFiles()
+    await loadFiles(true)
     setFeedback('文件上传成功，已插入当前内容', 'success')
     selectFile(created)
   } catch (error) {
@@ -663,6 +1060,7 @@ const uploadDriveFileAndSelect = async () => {
 
 let imageSearchTimer: number | null = null
 let fileSearchTimer: number | null = null
+let bookmarkSearchTimer: number | null = null
 
 watch(
   () => props.modelValue,
@@ -670,6 +1068,7 @@ watch(
     if (open) {
       clearTransientState()
       activeTab.value = props.defaultTab
+      void loadPickerTags()
       await ensureActiveTabData()
       return
     }
@@ -696,15 +1095,42 @@ watch(activeTab, async () => {
 watch(imageSort, async () => {
   if (suspendImageReload.value) return
   if (props.modelValue && activeTab.value === 'image') {
-    await loadImages()
+    await loadImages(true)
+  }
+})
+
+watch(imageActiveTagId, async () => {
+  if (suspendImageReload.value) return
+  if (props.modelValue && activeTab.value === 'image') {
+    await loadImages(true)
   }
 })
 
 watch(fileSort, async () => {
   if (suspendFileReload.value) return
   if (props.modelValue && activeTab.value === 'file') {
-    await loadFiles()
+    await loadFiles(true)
   }
+})
+
+watch(bookmarkSort, async () => {
+  if (suspendBookmarkReload.value) return
+  if (props.modelValue && activeTab.value === 'bookmark') {
+    await loadBookmarks(true)
+  }
+})
+
+watch(bookmarkActiveTagId, async () => {
+  if (suspendBookmarkReload.value) return
+  if (props.modelValue && activeTab.value === 'bookmark') {
+    await loadBookmarks(true)
+  }
+})
+
+watch(noteActiveTagId, async () => {
+  if (suspendNoteReload.value) return
+  if (!props.modelValue || activeTab.value !== 'note') return
+  await loadNotes(true)
 })
 
 watch(imageSearch, () => {
@@ -715,7 +1141,7 @@ watch(imageSearch, () => {
 
   imageSearchTimer = window.setTimeout(() => {
     if (props.modelValue && activeTab.value === 'image') {
-      void loadImages()
+      void loadImages(true)
     }
   }, 300)
 })
@@ -728,7 +1154,20 @@ watch(fileSearch, () => {
 
   fileSearchTimer = window.setTimeout(() => {
     if (props.modelValue && activeTab.value === 'file') {
-      void loadFiles()
+      void loadFiles(true)
+    }
+  }, 300)
+})
+
+watch(bookmarkSearch, () => {
+  if (suspendBookmarkReload.value) return
+  if (bookmarkSearchTimer) {
+    window.clearTimeout(bookmarkSearchTimer)
+  }
+
+  bookmarkSearchTimer = window.setTimeout(() => {
+    if (props.modelValue && activeTab.value === 'bookmark') {
+      void loadBookmarks(true)
     }
   }, 300)
 })
@@ -739,6 +1178,9 @@ onBeforeUnmount(() => {
   }
   if (fileSearchTimer) {
     window.clearTimeout(fileSearchTimer)
+  }
+  if (bookmarkSearchTimer) {
+    window.clearTimeout(bookmarkSearchTimer)
   }
 })
 </script>
@@ -760,10 +1202,24 @@ onBeforeUnmount(() => {
 .resource-picker__body {
   display: grid;
   gap: 16px;
+  overflow-y: auto;
+}
+
+.resource-load-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 8px;
 }
 
 .resource-picker__feedback {
   margin-top: 4px;
+}
+
+.resource-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
 }
 
 .resource-panel {
@@ -777,6 +1233,10 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(0, 1fr) 180px auto;
   gap: 12px;
   align-items: center;
+}
+
+.resource-toolbar--bookmark {
+  grid-template-columns: minmax(0, 1fr) 180px auto;
 }
 
 .upload-box {

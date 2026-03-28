@@ -1,6 +1,5 @@
 <template>
-  <v-container class="py-8" max-width="1000">
-
+  <v-container class="py-8" fluid>
     <v-row class="mt-0">
       <v-col cols="12" md="4">
         <v-card variant="elevated" elevation="1">

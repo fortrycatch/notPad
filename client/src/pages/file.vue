@@ -159,6 +159,11 @@
                     title="复制链接"
                     @click="copyFileUrl(file)"
                   />
+                  <v-list-item
+                    prepend-icon="mdi-bookmark-plus-outline"
+                    title="收藏"
+                    @click="openBookmarkForFile(file)"
+                  />
                 </v-list>
               </v-menu>
             </div>
@@ -318,6 +323,14 @@
     <v-snackbar v-model="showAlert" timeout="2800" location="top">
       {{ alertMessage }}
     </v-snackbar>
+
+    <AddBookmarkDialog
+      v-model="showBookmarkDialog"
+      resource-type="file"
+      :resource-id="bookmarkFileId"
+      :resource-title="bookmarkFileName"
+      :resource-url="bookmarkFileUrl"
+    />
   </div>
 </template>
 
@@ -326,6 +339,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { server } from '../server'
 import { putWithUploadProgress } from '../utils/putWithUploadProgress'
+import AddBookmarkDialog from '../components/compose/AddBookmarkDialog.vue'
 
 type SortKey = 'time_desc' | 'time' | 'name'
 type SearchScope = 'current' | 'all'
@@ -383,6 +397,18 @@ const showRenameDialog = ref(false)
 const renameValue = ref('')
 const renaming = ref(false)
 const renameTarget = ref<{ type: 'file'; id: number } | { type: 'folder'; id: string } | null>(null)
+
+const showBookmarkDialog = ref(false)
+const bookmarkFileId = ref('')
+const bookmarkFileName = ref('')
+const bookmarkFileUrl = ref('')
+
+const openBookmarkForFile = (file: DriveFile) => {
+  bookmarkFileId.value = String(file.id)
+  bookmarkFileName.value = file.name
+  bookmarkFileUrl.value = file.public_url || ''
+  showBookmarkDialog.value = true
+}
 
 const skeletonItems = Array.from({ length: 8 }, (_, index) => index)
 

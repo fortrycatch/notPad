@@ -1,13 +1,27 @@
 import { defineStore } from "pinia";
+
+const SETTINGS_CACHE_KEY = "userSettings";
+
+function loadCachedSettings(): Record<string, string> {
+    try {
+        return JSON.parse(localStorage.getItem(SETTINGS_CACHE_KEY) || "{}");
+    } catch {
+        return {};
+    }
+}
+
 export const useMainStore = defineStore("main", {
     state: () => ({
         authenticated: true,
-        token: "null",
+        token: localStorage.getItem("token") || "",
         darkMode: localStorage.getItem("darkMode") !== "false",
-        refreshTrigger: 0, // 用于触发页面刷新的计数器
+        refreshTrigger: 0,
+        settings: loadCachedSettings(),
     }),
+    getters: {
+        primaryColor: (state) => state.settings.primaryColor || "",
+    },
     actions: {
-        // 触发刷新
         triggerRefresh() {
             this.refreshTrigger++
         },
@@ -17,6 +31,10 @@ export const useMainStore = defineStore("main", {
         },
         toggleDarkMode() {
             this.setDarkMode(!this.darkMode);
+        },
+        applySettings(settings: Record<string, string>) {
+            this.settings = settings;
+            localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(settings));
         },
     }
 });

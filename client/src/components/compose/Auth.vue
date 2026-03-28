@@ -5,7 +5,7 @@
                 <div class="auth-title">
                     <h1>{{ isLogin ? '登录' : '注册' }}</h1>
                 </div>
-                <div class="auth-form">
+                <form class="auth-form" @submit.prevent="isLogin ? login() : register()">
                     <!-- 登录表单 -->
                     <template v-if="isLogin">
                         <v-text-field 
@@ -52,7 +52,7 @@
                         />
                     </template>
                     <v-btn 
-                        @click="isLogin ? login() : register()" 
+                        type="submit"
                         class="auth-button"
                         :loading="loading"
                     > 
@@ -60,6 +60,7 @@
                     </v-btn>
                     <div class="auth-switch">
                         <v-btn 
+                            type="button"
                             variant="text" 
                             @click="switchMode"
                             class="switch-button"
@@ -67,7 +68,7 @@
                             {{ isLogin ? '还没有账号？立即注册' : '已有账号？立即登录' }}
                         </v-btn>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
     <!-- </transition> -->
@@ -270,11 +271,13 @@ const switchMode = () => {
 .auth-container {
     width: 400px;
     min-height: 300px;
-    background-color: white;
+    background-color: rgb(var(--v-theme-surface));
+    color: rgb(var(--v-theme-on-surface));
     border-radius: 10px;
     padding: 20px;
     display: flex;
     flex-direction: column;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
 }
 
 .auth-title {
@@ -286,6 +289,7 @@ const switchMode = () => {
     margin: 0;
     font-size: 24px;
     font-weight: 500;
+    color: rgb(var(--v-theme-on-surface));
 }
 
 .auth-form {

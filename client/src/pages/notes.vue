@@ -9,11 +9,34 @@
           <div class="page-title">共 {{ store.notes.length }} 条</div>
         </div>
       </div>
-      <div class="toolbar-actions">
+      <div class="toolbar-actions desktop-toolbar">
+        <v-btn icon="mdi-flash" variant="tonal" @click="showQuickCreate = true" />
+        <v-btn variant="tonal" prepend-icon="mdi-tag-multiple" @click="showTagManager = true">
+          标签管理
+        </v-btn>
         <v-btn color="primary" prepend-icon="mdi-plus" @click="createNote">
           新建笔记
         </v-btn>
       </div>
+    </div>
+
+    <div v-if="tags.length > 0" class="tag-filter-row">
+      <v-chip
+        :color="activeTagId === null ? 'primary' : undefined"
+        :variant="activeTagId === null ? 'elevated' : 'outlined'"
+        @click="activeTagId = null"
+      >
+        全部
+      </v-chip>
+      <v-chip
+        v-for="tag in tags"
+        :key="tag.id"
+        :color="activeTagId === tag.id ? 'primary' : undefined"
+        :variant="activeTagId === tag.id ? 'elevated' : 'outlined'"
+        @click="activeTagId = tag.id"
+      >
+        {{ tag.name }}
+      </v-chip>
     </div>
 
     <div v-if="isInitialLoading" class="notes-grid">
@@ -60,6 +83,12 @@
                 </template>
                 <v-list-item-title>编辑</v-list-item-title>
               </v-list-item>
+              <v-list-item @click.stop="openBookmarkForNote(note)">
+                <template #prepend>
+                  <v-icon>mdi-bookmark-plus-outline</v-icon>
+                </template>
+                <v-list-item-title>收藏</v-list-item-title>
+              </v-list-item>
               <v-list-item @click.stop="deleteNote(note.id)" color="error">
                 <template #prepend>
                   <v-icon color="error">mdi-delete</v-icon>
@@ -74,9 +103,16 @@
           {{ truncateContent(note.content) }}
         </div>
 
-        <div class="note-card-footer">
-          <v-chip size="small" variant="tonal" color="primary" class="note-chip">
-            最近更新
+        <div v-if="noteTagsMap[note.id]?.length" class="note-card-footer">
+          <v-chip
+            v-for="tag in noteTagsMap[note.id]"
+            :key="tag.id"
+            size="small"
+            variant="tonal"
+            color="primary"
+            class="note-chip"
+          >
+            {{ tag.name }}
           </v-chip>
         </div>
       </v-card>
@@ -98,7 +134,105 @@
     </div>
   </div>
 
-  <!-- 删除确认对话框 -->
+  <div class="mobile-toolbar">
+    <v-btn variant="text" prepend-icon="mdi-flash" @click="showQuickCreate = true">
+      速记
+    </v-btn>
+    <v-btn variant="text" prepend-icon="mdi-tag-multiple" @click="showTagManager = true">
+      标签
+    </v-btn>
+    <v-btn color="primary" prepend-icon="mdi-plus" @click="createNote">
+      新建笔记
+    </v-btn>
+  </div>
+
+  <v-dialog v-model="showQuickCreate" max-width="480">
+    <v-card class="quick-create-card">
+      <v-card-title class="quick-create-title">
+        <v-icon size="20" class="mr-2">mdi-flash</v-icon>
+        速记
+      </v-card-title>
+      <v-card-text class="quick-create-body">
+        <v-text-field
+          v-model="quickTitle"
+          label="标题"
+          variant="outlined"
+          density="comfortable"
+          hide-details
+          autofocus
+          @keydown.enter="submitQuickCreate"
+        />
+        <v-textarea
+          v-model="quickContent"
+          label="内容（可选）"
+          variant="outlined"
+          density="comfortable"
+          hide-details
+          rows="3"
+          no-resize
+        />
+        <div v-if="tags.length > 0" class="quick-create-tags">
+          <div class="text-caption text-medium-emphasis mb-1">标签</div>
+          <div class="tag-chips-row">
+            <v-chip
+              v-for="tag in tags"
+              :key="tag.id"
+              :color="quickSelectedTagIds.includes(tag.id) ? 'primary' : undefined"
+              :variant="quickSelectedTagIds.includes(tag.id) ? 'elevated' : 'outlined'"
+              size="small"
+              @click="toggleQuickTag(tag.id)"
+            >
+              {{ tag.name }}
+            </v-chip>
+          </div>
+        </div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn variant="text" @click="showQuickCreate = false">取消</v-btn>
+        <v-btn color="primary" :loading="quickCreating" @click="submitQuickCreate">创建</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
+  <v-dialog v-model="showTagManager" max-width="480">
+    <v-card>
+      <v-card-title class="dialog-title">标签管理</v-card-title>
+      <v-card-text class="tag-manager-body">
+        <div class="tag-create-row">
+          <v-text-field
+            v-model="newTagName"
+            label="新标签名称"
+            variant="outlined"
+            density="comfortable"
+            hide-details
+            @keydown.enter="handleCreateTag"
+          />
+          <v-btn color="primary" :loading="creatingTag" @click="handleCreateTag">添加</v-btn>
+        </div>
+        <v-list v-if="tags.length > 0" density="compact" class="tag-list">
+          <v-list-item v-for="tag in tags" :key="tag.id">
+            <v-list-item-title>{{ tag.name }}</v-list-item-title>
+            <template #append>
+              <v-btn
+                icon="mdi-delete-outline"
+                size="small"
+                variant="text"
+                color="error"
+                @click="handleDeleteTag(tag.id)"
+              />
+            </template>
+          </v-list-item>
+        </v-list>
+        <div v-else class="text-medium-emphasis text-center pa-4">暂无标签</div>
+      </v-card-text>
+      <v-card-actions>
+        <v-spacer />
+        <v-btn @click="showTagManager = false">关闭</v-btn>
+      </v-card-actions>
+    </v-card>
+  </v-dialog>
+
   <v-dialog v-model="showDeleteDialog" max-width="400">
     <v-card>
       <v-card-title class="text-h6">
@@ -118,6 +252,14 @@
       </v-card-actions>
     </v-card>
   </v-dialog>
+
+  <AddBookmarkDialog
+    v-model="showBookmarkDialog"
+    resource-type="note"
+    :resource-id="bookmarkNoteId"
+    :resource-title="bookmarkNoteTitle"
+    :resource-description="bookmarkNoteDesc"
+  />
 </template>
 
 <script setup lang="ts">
@@ -126,6 +268,20 @@ import { useRouter, useRoute } from 'vue-router'
 import { trpc } from '../trpc'
 import noteStore from '../store/noteStore'
 import { useMainStore } from '../store/mainStore'
+import AddBookmarkDialog from '../components/compose/AddBookmarkDialog.vue'
+
+interface Note {
+  id: string
+  title: string
+  content: string
+  created_at: string | Date
+  updated_at: string | Date
+}
+
+interface TagItem {
+  id: number
+  name: string
+}
 
 const store = noteStore()
 const mainStore = useMainStore()
@@ -139,18 +295,33 @@ const hasMore = ref(true)
 const PAGE_SIZE = 30
 const skeletonItems = Array.from({ length: 8 }, (_, index) => index)
 
-interface Note {
-  id: string
-  title: string
-  content: string
-  created_at: string | Date
-  updated_at: string | Date
-  //?
-}
-
 const showDeleteDialog = ref(false)
 const deletingNoteId = ref('')
 const deleting = ref(false)
+const showQuickCreate = ref(false)
+const quickTitle = ref('')
+const quickContent = ref('')
+const quickCreating = ref(false)
+
+const tags = ref<TagItem[]>([])
+const activeTagId = ref<number | null>(null)
+const showTagManager = ref(false)
+const newTagName = ref('')
+const creatingTag = ref(false)
+const noteTagsMap = ref<Record<string, TagItem[]>>({})
+const quickSelectedTagIds = ref<number[]>([])
+
+const showBookmarkDialog = ref(false)
+const bookmarkNoteId = ref('')
+const bookmarkNoteTitle = ref('')
+const bookmarkNoteDesc = ref('')
+
+const openBookmarkForNote = (note: Note) => {
+  bookmarkNoteId.value = note.id
+  bookmarkNoteTitle.value = note.title
+  bookmarkNoteDesc.value = note.content?.slice(0, 200) || ''
+  showBookmarkDialog.value = true
+}
 
 const isInitialLoading = computed(() => loading.value && store.notes.length === 0)
 
@@ -162,23 +333,43 @@ const refreshNotes = async () => {
   await fetchNotes()
 }
 
-// 获取笔记列表
+const loadTags = async () => {
+  tags.value = await trpc.notepad.listTags.query() as TagItem[]
+}
+
+const loadNoteTagsBatch = async (notes: Note[]) => {
+  const results = await Promise.all(
+    notes.map((n) => trpc.notepad.getNoteTags.query({ note_id: n.id }) as Promise<TagItem[]>)
+  )
+  for (let i = 0; i < notes.length; i++) {
+    noteTagsMap.value[notes[i].id] = results[i]
+  }
+}
+
 const fetchNotes = async (isLoadMore = false) => {
   if (loading.value || loadingMore.value) return
-  
+
   try {
     if (isLoadMore) {
       loadingMore.value = true
     } else {
       loading.value = true
     }
-    
-    const result = await trpc.notepad.getNotes.query(page.value) as Note[]
-    
+
+    const result = await trpc.notepad.getNotes.query({
+      page: page.value,
+      tag_id: activeTagId.value
+    }) as Note[]
+
     if (page.value === 0) {
       store.notes = result as any
+      noteTagsMap.value = {}
     } else if (result.length > 0) {
       store.notes.push(...(result as any))
+    }
+
+    if (result.length > 0) {
+      await loadNoteTagsBatch(result)
     }
 
     hasMore.value = result.length >= PAGE_SIZE
@@ -270,7 +461,70 @@ const confirmDelete = async () => {
   }
 }
 
-// 截断内容
+const toggleQuickTag = (id: number) => {
+  const idx = quickSelectedTagIds.value.indexOf(id)
+  if (idx >= 0) {
+    quickSelectedTagIds.value.splice(idx, 1)
+  } else {
+    quickSelectedTagIds.value.push(id)
+  }
+}
+
+const submitQuickCreate = async () => {
+  const title = quickTitle.value.trim()
+  if (!title || quickCreating.value) return
+
+  quickCreating.value = true
+  try {
+    const created = await trpc.notepad.createNote.mutate({ title, content: quickContent.value }) as Note | null
+    if (created?.id && quickSelectedTagIds.value.length > 0) {
+      await Promise.all(
+        quickSelectedTagIds.value.map((tagId) =>
+          trpc.notepad.addTagToNote.mutate({ note_id: created.id, tag_id: tagId })
+        )
+      )
+    }
+    showQuickCreate.value = false
+    quickTitle.value = ''
+    quickContent.value = ''
+    quickSelectedTagIds.value = []
+    await refreshNotes()
+  } catch (error) {
+    console.error('快速创建笔记失败:', error)
+  } finally {
+    quickCreating.value = false
+  }
+}
+
+const handleCreateTag = async () => {
+  const name = newTagName.value.trim()
+  if (!name || creatingTag.value) return
+
+  creatingTag.value = true
+  try {
+    await trpc.notepad.createTag.mutate({ name })
+    newTagName.value = ''
+    await loadTags()
+  } catch (error) {
+    console.error('创建标签失败:', error)
+  } finally {
+    creatingTag.value = false
+  }
+}
+
+const handleDeleteTag = async (id: number) => {
+  try {
+    await trpc.notepad.deleteTag.mutate({ id })
+    if (activeTagId.value === id) {
+      activeTagId.value = null
+    }
+    await loadTags()
+    await refreshNotes()
+  } catch (error) {
+    console.error('删除标签失败:', error)
+  }
+}
+
 const truncateContent = (content: string) => {
   return content.length > 100 ? content.substring(0, 100) + '...' : content
 }
@@ -281,7 +535,10 @@ const formatDate = (dateString: string | Date) => {
   return date.toLocaleDateString('zh-CN')
 }
 
-// 监听登录状态和刷新触发
+watch(activeTagId, () => {
+  refreshNotes()
+})
+
 watch(
   () => [mainStore.authenticated, mainStore.refreshTrigger, route.path],
   ([authenticated, , path]) => {
@@ -293,8 +550,8 @@ watch(
 )
 
 onMounted(() => {
+  loadTags()
   fetchNotes()
-  // 添加滚动监听
   window.addEventListener('scroll', handleScroll, { passive: true })
 })
 
@@ -417,14 +674,50 @@ onUnmounted(() => {
   word-break: break-word;
 }
 
+.tag-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px 0 0;
+}
+
 .note-card-footer {
   display: flex;
-  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6px;
   padding-top: 16px;
 }
 
 .note-chip {
   font-size: 12px;
+}
+
+.dialog-title {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.tag-manager-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tag-create-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tag-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.tag-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .empty-state {
@@ -454,18 +747,57 @@ onUnmounted(() => {
   color: rgb(var(--v-theme-on-surface-variant));
 }
 
-@media (max-width: 700px) {
-  .row {
-    flex-direction: column;
-    align-items: stretch;
+.quick-create-title {
+  display: flex;
+  align-items: center;
+  font-size: 18px;
+  font-weight: 700;
+  padding-bottom: 0;
+}
+
+.quick-create-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.mobile-toolbar {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .desktop-toolbar {
+    display: none;
   }
 
-  .toolbar-actions {
-    justify-content: flex-start;
+  .notes-container {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 104px);
   }
 
   .page-title {
     font-size: 24px;
+  }
+
+  .mobile-toolbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
+    border: 1px solid rgba(var(--v-theme-on-surface), 0.08);
+    background: rgba(var(--v-theme-surface), 0.96);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  }
+
+  .mobile-toolbar > * {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }
 </style>

@@ -4,6 +4,8 @@ import auth from './auth.js';
 import notepad from './notepad.js';
 import image_bed from './image_bed.js';
 import file_drive from './file_drive.js';
+import bookmark from './bookmark.js';
+import setting from './setting.js';
 import { timelineData } from '../utils/sqlData.js';
 const appRouter = router({
     hello: publicPro.input(z.string()).query(({ input }) => {
@@ -19,6 +21,8 @@ const appRouter = router({
     notepad,
     image_bed,
     file_drive,
+    bookmark,
+    setting,
 })
 export default appRouter;
 export type AppRouter = typeof appRouter;

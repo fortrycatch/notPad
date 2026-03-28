@@ -13,7 +13,47 @@
           <div class="note-create-topbar__title">新建笔记</div>
         </div>
       </div>
+      <v-menu :close-on-content-click="false">
+        <template #activator="{ props: tagMenuProps }">
+          <v-btn
+            variant="tonal"
+            prepend-icon="mdi-tag-outline"
+            v-bind="tagMenuProps"
+          >
+            标签{{ selectedTagIds.length > 0 ? ` (${selectedTagIds.length})` : '' }}
+          </v-btn>
+        </template>
+        <v-list density="compact" min-width="200">
+          <v-list-item
+            v-for="tag in allTags"
+            :key="tag.id"
+            @click="toggleTag(tag.id)"
+          >
+            <template #prepend>
+              <v-icon :color="selectedTagIds.includes(tag.id) ? 'primary' : undefined">
+                {{ selectedTagIds.includes(tag.id) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+              </v-icon>
+            </template>
+            <v-list-item-title>{{ tag.name }}</v-list-item-title>
+          </v-list-item>
+          <v-list-item v-if="allTags.length === 0" disabled>
+            <v-list-item-title class="text-medium-emphasis">暂无标签</v-list-item-title>
+          </v-list-item>
+        </v-list>
+      </v-menu>
     </header>
+
+    <div v-if="selectedTagNames.length > 0" class="create-tags-row">
+      <v-chip
+        v-for="tag in selectedTagNames"
+        :key="tag.id"
+        size="small"
+        closable
+        @click:close="toggleTag(tag.id)"
+      >
+        {{ tag.name }}
+      </v-chip>
+    </div>
 
     <NoteMarkdownEditor
       v-model="form"
@@ -32,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import NoteMarkdownEditor from '../../components/note/NoteMarkdownEditor.vue'
 import { useMainStore } from '../../store/mainStore'
@@ -46,6 +86,11 @@ interface Note {
   updated_at: string | Date
 }
 
+interface TagItem {
+  id: number
+  name: string
+}
+
 const router = useRouter()
 const mainStore = useMainStore()
 
@@ -56,10 +101,25 @@ const form = ref({
 const saving = ref(false)
 const showSaveError = ref(false)
 const saveErrorMessage = ref('')
+const allTags = ref<TagItem[]>([])
+const selectedTagIds = ref<number[]>([])
 
 const canSave = computed(() => {
-  return form.value.title.trim() !== '' && form.value.content.trim() !== ''
+  return form.value.title.trim() !== ''
 })
+
+const selectedTagNames = computed(() =>
+  allTags.value.filter((t) => selectedTagIds.value.includes(t.id))
+)
+
+const toggleTag = (id: number) => {
+  const idx = selectedTagIds.value.indexOf(id)
+  if (idx >= 0) {
+    selectedTagIds.value.splice(idx, 1)
+  } else {
+    selectedTagIds.value.push(id)
+  }
+}
 
 const createNote = async () => {
   if (!canSave.value || saving.value) return
@@ -75,6 +135,14 @@ const createNote = async () => {
       throw new Error('创建笔记失败')
     }
 
+    if (selectedTagIds.value.length > 0) {
+      await Promise.all(
+        selectedTagIds.value.map((tagId) =>
+          trpc.notepad.addTagToNote.mutate({ note_id: created.id, tag_id: tagId })
+        )
+      )
+    }
+
     mainStore.triggerRefresh()
     router.replace(`/note/${created.id}`)
   } catch (err: any) {
@@ -85,6 +153,10 @@ const createNote = async () => {
     saving.value = false
   }
 }
+
+onMounted(async () => {
+  allTags.value = await trpc.notepad.listTags.query() as TagItem[]
+})
 
 const goBack = () => {
   if (window.history.length > 1) {
@@ -127,6 +199,13 @@ const goBack = () => {
 .note-create-topbar__title {
   font-size: 18px;
   font-weight: 700;
+}
+
+.create-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 0 0;
 }
 
 @media (max-width: 760px) {

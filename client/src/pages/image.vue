@@ -180,6 +180,21 @@
           rounded="lg"
           show-size
         />
+        <div v-if="tags.length > 0" class="upload-tags-section">
+          <div class="text-caption text-medium-emphasis mb-1">标签</div>
+          <div class="tag-chips-row">
+            <v-chip
+              v-for="tag in tags"
+              :key="tag.id"
+              :color="uploadSelectedTagIds.includes(tag.id) ? 'primary' : undefined"
+              :variant="uploadSelectedTagIds.includes(tag.id) ? 'elevated' : 'outlined'"
+              size="small"
+              @click="toggleUploadTag(tag.id)"
+            >
+              {{ tag.name }}
+            </v-chip>
+          </div>
+        </div>
       </v-card-text>
       <v-card-actions>
         <v-spacer />
@@ -270,6 +285,7 @@ const tags = ref<TagItem[]>([])
 const activeTagId = ref<number | null>(null)
 const newTagName = ref('')
 const creatingTag = ref(false)
+const uploadSelectedTagIds = ref<number[]>([])
 
 const PAGE_SIZE = 30
 const skeletonItems = Array.from({ length: 8 }, (_, index) => index)
@@ -285,7 +301,17 @@ const showAlert3s = (message: string) => {
 }
 
 const openUploadDialog = () => {
+  uploadSelectedTagIds.value = []
   showUploadDialog.value = true
+}
+
+const toggleUploadTag = (id: number) => {
+  const idx = uploadSelectedTagIds.value.indexOf(id)
+  if (idx >= 0) {
+    uploadSelectedTagIds.value.splice(idx, 1)
+  } else {
+    uploadSelectedTagIds.value.push(id)
+  }
 }
 
 const uploadImage = async () => {
@@ -310,13 +336,22 @@ const uploadImage = async () => {
       throw new Error('上传失败')
     }
 
-    await server.image_bed.addImage.mutate({
+    const result = await server.image_bed.addImage.mutate({
       name: file.value.name,
       filename: uploadUrl.filename,
       remark: ''
     })
 
+    if (uploadSelectedTagIds.value.length > 0 && result.insertId) {
+      await Promise.all(
+        uploadSelectedTagIds.value.map((tagId) =>
+          server.image_bed.addTagToImage.mutate({ image_id: result.insertId, tag_id: tagId })
+        )
+      )
+    }
+
     file.value = null
+    uploadSelectedTagIds.value = []
     showUploadDialog.value = false
     await getList()
   } catch (error) {
@@ -631,6 +666,16 @@ onUnmounted(() => {
   margin-bottom: 16px;
   color: rgb(var(--v-theme-on-surface-variant));
   line-height: 1.6;
+}
+
+.upload-tags-section {
+  margin-top: 8px;
+}
+
+.tag-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .mobile-toolbar {

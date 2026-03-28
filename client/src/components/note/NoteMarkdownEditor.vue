@@ -83,6 +83,7 @@
               :placeholder="contentPlaceholder"
               spellcheck="false"
               @input="handleContentInput"
+              @paste="handlePaste"
               @click="syncEditorSelection"
               @focus="syncEditorSelection"
               @keyup="syncEditorSelection"
@@ -106,6 +107,28 @@
       :default-tab="resourcePickerTab"
       @select="handleResourceSelect"
     />
+
+    <v-dialog v-model="showPastePreview" max-width="520" persistent>
+      <v-card>
+        <v-card-title class="d-flex align-center ga-2">
+          <v-icon>mdi-image-plus</v-icon>
+          粘贴图片
+        </v-card-title>
+        <v-card-text class="paste-preview-body">
+          <img
+            v-if="pastePreviewUrl"
+            :src="pastePreviewUrl"
+            class="paste-preview-image"
+            alt="粘贴的图片"
+          />
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" :disabled="pasteUploading" @click="cancelPasteImage">取消</v-btn>
+          <v-btn color="primary" :loading="pasteUploading" @click="confirmPasteImage">上传并插入</v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <v-navigation-drawer
       v-model="showMobileToc"
@@ -186,6 +209,7 @@ import 'viewerjs/dist/viewer.css'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ResourcePickerDialog from '../compose/ResourcePickerDialog.vue'
 import { useMainStore } from '../../store/mainStore'
+import { trpc } from '../../trpc'
 
 interface EditorForm {
   title: string
@@ -212,7 +236,7 @@ interface MarkdownDocument {
 }
 
 type EditorViewMode = 'write' | 'preview'
-type ResourcePickerTab = 'image' | 'note' | 'file'
+type ResourcePickerTab = 'image' | 'note' | 'file' | 'bookmark'
 
 const props = withDefaults(defineProps<{
   modelValue: EditorForm
@@ -258,6 +282,10 @@ const resourcePickerTab = ref<ResourcePickerTab>('image')
 const editorSelectionStart = ref(0)
 const editorSelectionEnd = ref(0)
 const isApplyingResourceSelection = ref(false)
+const showPastePreview = ref(false)
+const pastePreviewUrl = ref('')
+const pasteUploading = ref(false)
+let pasteFile: File | null = null
 let headingObserver: IntersectionObserver | null = null
 let imageViewer: Viewer | null = null
 let mermaidModulePromise: Promise<typeof import('mermaid')> | null = null
@@ -285,6 +313,57 @@ const defaultHeadingOpenRenderer = markdown.renderer.rules.heading_open
 const defaultLinkOpenRenderer = markdown.renderer.rules.link_open
   ?.bind(markdown.renderer.rules)
 
+const getFileIconClass = (mime: string) => {
+  if (!mime) return 'mdi-file-outline'
+  if (mime.startsWith('image/')) return 'mdi-file-image-outline'
+  if (mime.startsWith('video/')) return 'mdi-file-video-outline'
+  if (mime.includes('pdf')) return 'mdi-file-pdf-box'
+  if (mime.includes('zip') || mime.includes('compressed')) return 'mdi-folder-zip-outline'
+  if (mime.startsWith('text/')) return 'mdi-file-document-outline'
+  return 'mdi-file-outline'
+}
+
+const formatCardFileSize = (bytes: number) => {
+  if (!bytes) return ''
+  const units = ['B', 'KB', 'MB', 'GB']
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+const renderResourceCard = (data: any): string => {
+  const esc = markdown.utils.escapeHtml
+
+  if (data.type === 'note') {
+    const title = esc(data.title || '未命名笔记')
+    const href = `/note/${encodeURIComponent(data.id)}`
+    return `<a href="${esc(href)}" class="note-resource-card note-resource-card--note" target="_blank" rel="noreferrer noopener"><span class="note-resource-card__icon mdi mdi-note-text-outline"></span><span class="note-resource-card__body"><span class="note-resource-card__title">${title}</span><span class="note-resource-card__meta">笔记引用</span></span></a>`
+  }
+
+  if (data.type === 'file') {
+    const name = esc(data.name || '文件')
+    const url = esc(data.url || '')
+    const iconClass = getFileIconClass(data.mime || '')
+    const size = data.size ? formatCardFileSize(data.size) : ''
+    return `<a href="${url}" class="note-resource-card note-resource-card--file" target="_blank" rel="noreferrer noopener"><span class="note-resource-card__icon mdi ${iconClass}"></span><span class="note-resource-card__body"><span class="note-resource-card__title">${name}</span>${size ? `<span class="note-resource-card__meta">${esc(size)}</span>` : ''}</span></a>`
+  }
+
+  if (data.type === 'bookmark') {
+    const title = esc(data.title || '书签')
+    const href = `/bookmark/${encodeURIComponent(String(data.id))}`
+    const kind = typeof data.kind === 'string' ? data.kind : ''
+    const kindMeta: Record<string, string> = {
+      url: '链接书签',
+      image: '图片书签',
+      note: '笔记书签',
+      file: '文件书签'
+    }
+    const meta = esc(kindMeta[kind] || '书签')
+    return `<a href="${esc(href)}" class="note-resource-card note-resource-card--bookmark" target="_blank" rel="noreferrer noopener"><span class="note-resource-card__icon mdi mdi-bookmark-multiple-outline"></span><span class="note-resource-card__body"><span class="note-resource-card__title">${title}</span><span class="note-resource-card__meta">${meta}</span></span></a>`
+  }
+
+  return ''
+}
+
 markdown.renderer.rules.fence = (
   tokens: any[],
   idx: number,
@@ -297,6 +376,14 @@ markdown.renderer.rules.fence = (
 
   if (language === 'mermaid') {
     return `<div class="mermaid">${markdown.utils.escapeHtml(token.content)}</div>`
+  }
+
+  if (language === 'notecard') {
+    try {
+      return renderResourceCard(JSON.parse(token.content.trim()))
+    } catch {
+      // malformed notecard
+    }
   }
 
   if (defaultFenceRenderer) {
@@ -675,8 +762,9 @@ const openResourcePicker = (tab: ResourcePickerTab = 'image') => {
 const handleResourceSelect = async (
   payload:
     | { type: 'image'; item: { name: string; url: string } }
-    | { type: 'file'; item: { name: string; public_url: string } }
+    | { type: 'file'; item: { name: string; public_url: string; size: number; mime_type: string } }
     | { type: 'note'; item: NoteItem }
+    | { type: 'bookmark'; item: { id: number; title: string; type: 'url' | 'image' | 'note' | 'file' } }
 ) => {
   try {
     isApplyingResourceSelection.value = true
@@ -688,12 +776,32 @@ const handleResourceSelect = async (
     }
 
     if (payload.type === 'file') {
-      await insertTextAtCursor(`[${payload.item.name}](${payload.item.public_url})`)
+      const cardData = JSON.stringify({
+        type: 'file',
+        name: payload.item.name,
+        url: payload.item.public_url,
+        size: payload.item.size,
+        mime: payload.item.mime_type
+      })
+      await insertTextAtCursor(`\n\`\`\`notecard\n${cardData}\n\`\`\`\n`)
       return
     }
 
-    const title = payload.item.title.trim() || '未命名笔记'
-    await insertTextAtCursor(`[${title}](/note/${payload.item.id})`)
+    if (payload.type === 'note') {
+      const title = payload.item.title.trim() || '未命名笔记'
+      const cardData = JSON.stringify({ type: 'note', id: payload.item.id, title })
+      await insertTextAtCursor(`\n\`\`\`notecard\n${cardData}\n\`\`\`\n`)
+      return
+    }
+
+    const title = payload.item.title.trim() || '书签'
+    const cardData = JSON.stringify({
+      type: 'bookmark',
+      id: payload.item.id,
+      title,
+      kind: payload.item.type
+    })
+    await insertTextAtCursor(`\n\`\`\`notecard\n${cardData}\n\`\`\`\n`)
   } finally {
     requestAnimationFrame(() => {
       isApplyingResourceSelection.value = false
@@ -718,6 +826,66 @@ const scrollToHeading = async (id: string) => {
 const selectMobileTocItem = async (id: string) => {
   showMobileToc.value = false
   await scrollToHeading(id)
+}
+
+const handlePaste = (event: ClipboardEvent) => {
+  const items = event.clipboardData?.items
+  if (!items) return
+
+  for (const item of items) {
+    if (!item.type.startsWith('image/')) continue
+
+    const file = item.getAsFile()
+    if (!file) continue
+
+    event.preventDefault()
+    syncEditorSelection()
+    pasteFile = file
+    pastePreviewUrl.value = URL.createObjectURL(file)
+    showPastePreview.value = true
+    return
+  }
+}
+
+const cancelPasteImage = () => {
+  showPastePreview.value = false
+  if (pastePreviewUrl.value) {
+    URL.revokeObjectURL(pastePreviewUrl.value)
+    pastePreviewUrl.value = ''
+  }
+  pasteFile = null
+}
+
+const confirmPasteImage = async () => {
+  if (!pasteFile) return
+
+  pasteUploading.value = true
+  try {
+    const file = pasteFile
+    const filename = file.name || `paste-${Date.now()}.png`
+
+    const uploadUrl = await trpc.image_bed.getUploadUrl.query({
+      filename,
+      type: file.type
+    })
+
+    const result = await fetch(uploadUrl.url, { method: 'PUT', body: file })
+    if (!result.ok) throw new Error(`upload failed: ${result.status}`)
+
+    await trpc.image_bed.addImage.mutate({
+      name: filename,
+      filename: uploadUrl.filename,
+      remark: ''
+    })
+
+    const imageName = filename.split('/').pop() || filename
+    await insertTextAtCursor(`![${imageName}](https://monika.jkloli.net/${uploadUrl.filename})`)
+  } catch (err) {
+    console.error('粘贴图片上传失败:', err)
+  } finally {
+    pasteUploading.value = false
+    cancelPasteImage()
+  }
 }
 
 const handleKeydown = (event: KeyboardEvent) => {
@@ -784,6 +952,9 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleKeydown)
   disconnectHeadingObserver()
   destroyImageViewer()
+  if (pastePreviewUrl.value) {
+    URL.revokeObjectURL(pastePreviewUrl.value)
+  }
 })
 </script>
 
@@ -1064,6 +1235,66 @@ onBeforeUnmount(() => {
   border-radius: 18px;
   background: rgba(var(--v-theme-on-surface), 0.08);
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+}
+
+.note-markdown :deep(.note-resource-card) {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  margin: 1.1em 0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  text-decoration: none !important;
+  color: inherit !important;
+  transition: background 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+
+.note-markdown :deep(.note-resource-card:hover) {
+  background: rgba(var(--v-theme-primary), 0.06);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+}
+
+.note-markdown :deep(.note-resource-card__icon) {
+  font-size: 28px;
+  color: rgb(var(--v-theme-primary));
+  flex-shrink: 0;
+}
+
+.note-markdown :deep(.note-resource-card__body) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.note-markdown :deep(.note-resource-card__title) {
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-markdown :deep(.note-resource-card__meta) {
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
+}
+
+.paste-preview-body {
+  display: grid;
+  place-items: center;
+}
+
+.paste-preview-image {
+  max-width: 100%;
+  max-height: 360px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 @media (max-width: 1100px) {

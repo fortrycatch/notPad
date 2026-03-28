@@ -15,6 +15,14 @@ import '@mdi/font/css/materialdesignicons.css'
 
 const defaultDarkMode = localStorage.getItem("darkMode") !== "false";
 
+const DEFAULT_PRIMARY = '#ff9edd';
+const cachedPrimary = (() => {
+	try {
+		const s = JSON.parse(localStorage.getItem("userSettings") || "{}");
+		return s.primaryColor || DEFAULT_PRIMARY;
+	} catch { return DEFAULT_PRIMARY; }
+})();
+
 const vuetify = createVuetify({
 	// blueprint: md3,
 	components,
@@ -27,7 +35,7 @@ const vuetify = createVuetify({
 		themes: {
 			light: {
 				colors: {
-					primary: '#ff9edd',
+					primary: cachedPrimary,
 					background: '#fff7fb',
 					surface: '#ffffff',
 					'surface-bright': '#fff7fb',
@@ -38,7 +46,7 @@ const vuetify = createVuetify({
 			dark: {
 				dark: true,
 				colors: {
-					primary: '#ff9edd',
+					primary: cachedPrimary,
 					background: '#121018',
 					surface: '#1b1724',
 					'surface-bright': '#241d31',

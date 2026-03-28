@@ -43,6 +43,38 @@
             >
               目录
             </v-btn>
+            <v-menu :close-on-content-click="false">
+              <template #activator="{ props: tagMenuProps }">
+                <v-btn variant="text" prepend-icon="mdi-tag-outline" v-bind="tagMenuProps">
+                  标签
+                </v-btn>
+              </template>
+              <v-list density="compact" min-width="200">
+                <v-list-item
+                  v-for="tag in allTags"
+                  :key="tag.id"
+                  @click="toggleTag(tag)"
+                >
+                  <template #prepend>
+                    <v-icon :color="isTagged(tag.id) ? 'primary' : undefined">
+                      {{ isTagged(tag.id) ? 'mdi-checkbox-marked' : 'mdi-checkbox-blank-outline' }}
+                    </v-icon>
+                  </template>
+                  <v-list-item-title>{{ tag.name }}</v-list-item-title>
+                </v-list-item>
+                <v-list-item v-if="allTags.length === 0" disabled>
+                  <v-list-item-title class="text-medium-emphasis">暂无标签</v-list-item-title>
+                </v-list-item>
+              </v-list>
+            </v-menu>
+            <v-btn
+              variant="text"
+              :prepend-icon="noteIsBookmarked ? 'mdi-bookmark' : 'mdi-bookmark-outline'"
+              :color="noteIsBookmarked ? 'primary' : undefined"
+              @click="showBookmarkDialog = true"
+            >
+              收藏
+            </v-btn>
             <v-btn color="primary" prepend-icon="mdi-pencil" @click="enterEditMode" :disabled="saving">
               编辑
             </v-btn>
@@ -89,6 +121,17 @@
           <div class="note-reader">
             <div class="note-reader-header">
               <h1 class="note-title">{{ note.title }}</h1>
+              <div v-if="noteTags.length > 0" class="note-tags-row">
+                <v-chip
+                  v-for="tag in noteTags"
+                  :key="tag.id"
+                  size="small"
+                  closable
+                  @click:close="removeTag(tag.id)"
+                >
+                  {{ tag.name }}
+                </v-chip>
+              </div>
             </div>
             <v-divider />
 
@@ -97,6 +140,7 @@
               :key="`reader-${mainStore.darkMode ? 'dark' : 'light'}`"
               class="note-markdown"
               v-html="viewDocument.html"
+              @click="handleArticleClick"
             />
           </div>
         </section>
@@ -167,6 +211,16 @@
       <v-icon start>mdi-alert-circle</v-icon>
       {{ saveErrorMessage }}
     </v-snackbar>
+
+    <AddBookmarkDialog
+      v-if="note"
+      v-model="showBookmarkDialog"
+      resource-type="note"
+      :resource-id="note.id"
+      :resource-title="note.title"
+      :resource-description="note.content?.slice(0, 200) || ''"
+      @bookmarked="noteIsBookmarked = true"
+    />
   </div>
 </template>
 
@@ -177,6 +231,7 @@ import 'viewerjs/dist/viewer.css'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import NoteMarkdownEditor from '../../components/note/NoteMarkdownEditor.vue'
+import AddBookmarkDialog from '../../components/compose/AddBookmarkDialog.vue'
 import { useMainStore } from '../../store/mainStore'
 import { trpc } from '../../trpc'
 
@@ -190,6 +245,11 @@ interface Note {
   content: string
   created_at: string | Date
   updated_at: string | Date
+}
+
+interface TagItem {
+  id: number
+  name: string
 }
 
 interface TocItem {
@@ -206,6 +266,8 @@ interface MarkdownDocument {
 const note = ref<Note | null>(null)
 const loading = ref(false)
 const error = ref<string | null>(null)
+const allTags = ref<TagItem[]>([])
+const noteTags = ref<TagItem[]>([])
 const isEditing = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
@@ -214,6 +276,8 @@ const showSaveSuccess = ref(false)
 const showSaveError = ref(false)
 const saveErrorMessage = ref('')
 const showMobileToc = ref(false)
+const showBookmarkDialog = ref(false)
+const noteIsBookmarked = ref(false)
 const articleRef = ref<HTMLElement | null>(null)
 const activeHeadingId = ref('')
 let headingObserver: IntersectionObserver | null = null
@@ -253,6 +317,43 @@ const defaultHeadingOpenRenderer = markdown.renderer.rules.heading_open
 const defaultLinkOpenRenderer = markdown.renderer.rules.link_open
   ?.bind(markdown.renderer.rules)
 
+const getFileIconClass = (mime: string) => {
+  if (!mime) return 'mdi-file-outline'
+  if (mime.startsWith('image/')) return 'mdi-file-image-outline'
+  if (mime.startsWith('video/')) return 'mdi-file-video-outline'
+  if (mime.includes('pdf')) return 'mdi-file-pdf-box'
+  if (mime.includes('zip') || mime.includes('compressed')) return 'mdi-folder-zip-outline'
+  if (mime.startsWith('text/')) return 'mdi-file-document-outline'
+  return 'mdi-file-outline'
+}
+
+const formatCardFileSize = (bytes: number) => {
+  if (!bytes) return ''
+  const units = ['B', 'KB', 'MB', 'GB']
+  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+}
+
+const renderResourceCard = (data: any): string => {
+  const esc = markdown.utils.escapeHtml
+
+  if (data.type === 'note') {
+    const title = esc(data.title || '未命名笔记')
+    const href = `/note/${encodeURIComponent(data.id)}`
+    return `<a href="${esc(href)}" class="note-resource-card note-resource-card--note"><span class="note-resource-card__icon mdi mdi-note-text-outline"></span><span class="note-resource-card__body"><span class="note-resource-card__title">${title}</span><span class="note-resource-card__meta">笔记引用</span></span></a>`
+  }
+
+  if (data.type === 'file') {
+    const name = esc(data.name || '文件')
+    const url = esc(data.url || '')
+    const iconClass = getFileIconClass(data.mime || '')
+    const size = data.size ? formatCardFileSize(data.size) : ''
+    return `<a href="${url}" class="note-resource-card note-resource-card--file" target="_blank" rel="noreferrer noopener"><span class="note-resource-card__icon mdi ${iconClass}"></span><span class="note-resource-card__body"><span class="note-resource-card__title">${name}</span>${size ? `<span class="note-resource-card__meta">${esc(size)}</span>` : ''}</span></a>`
+  }
+
+  return ''
+}
+
 markdown.renderer.rules.fence = (
   tokens: any[],
   idx: number,
@@ -265,6 +366,14 @@ markdown.renderer.rules.fence = (
 
   if (language === 'mermaid') {
     return `<div class="mermaid">${markdown.utils.escapeHtml(token.content)}</div>`
+  }
+
+  if (language === 'notecard') {
+    try {
+      return renderResourceCard(JSON.parse(token.content.trim()))
+    } catch {
+      // malformed notecard
+    }
   }
 
   if (defaultFenceRenderer) {
@@ -433,7 +542,7 @@ const buildMarkdownDocument = (content: string) => {
 }
 
 const canSave = computed(() => {
-  return editForm.value.title.trim() !== '' && editForm.value.content.trim() !== ''
+  return editForm.value.title.trim() !== ''
 })
 
 const hasChanges = computed(() => {
@@ -571,6 +680,33 @@ const renderMermaidDiagrams = async () => {
   }))
 }
 
+const loadAllTags = async () => {
+  allTags.value = await trpc.notepad.listTags.query() as TagItem[]
+}
+
+const loadNoteTags = async () => {
+  if (!noteId.value) return
+  noteTags.value = await trpc.notepad.getNoteTags.query({ note_id: noteId.value }) as TagItem[]
+}
+
+const isTagged = (tagId: number) => noteTags.value.some((t) => t.id === tagId)
+
+const toggleTag = async (tag: TagItem) => {
+  if (!noteId.value) return
+  if (isTagged(tag.id)) {
+    await trpc.notepad.removeTagFromNote.mutate({ note_id: noteId.value, tag_id: tag.id })
+  } else {
+    await trpc.notepad.addTagToNote.mutate({ note_id: noteId.value, tag_id: tag.id })
+  }
+  await loadNoteTags()
+}
+
+const removeTag = async (tagId: number) => {
+  if (!noteId.value) return
+  await trpc.notepad.removeTagFromNote.mutate({ note_id: noteId.value, tag_id: tagId })
+  await loadNoteTags()
+}
+
 const fetchNote = async () => {
   if (!noteId.value) {
     error.value = '笔记ID不存在'
@@ -587,6 +723,11 @@ const fetchNote = async () => {
       content: result.content
     }
     isEditing.value = isEditRoute.value
+    loadAllTags()
+    loadNoteTags()
+    trpc.bookmark.isBookmarked.query({ type: 'note', ref_id: noteId.value }).then(r => {
+      noteIsBookmarked.value = r.bookmarked
+    })
   } catch (err: any) {
     console.error('获取笔记失败:', err)
     error.value = err?.message || '获取笔记失败，请稍后重试'
@@ -684,6 +825,17 @@ const scrollToHeading = async (id: string) => {
   activeHeadingId.value = id
   const top = window.scrollY + target.getBoundingClientRect().top - HEADING_OFFSET
   window.scrollTo({ top, behavior: 'smooth' })
+}
+
+const handleArticleClick = (event: MouseEvent) => {
+  const card = (event.target as HTMLElement).closest<HTMLAnchorElement>('.note-resource-card--note')
+  if (!card) return
+
+  const href = card.getAttribute('href')
+  if (!href) return
+
+  event.preventDefault()
+  router.push(href)
 }
 
 const selectMobileTocItem = async (id: string) => {
@@ -944,6 +1096,13 @@ onBeforeUnmount(() => {
   padding: 0 0 24px;
 }
 
+.note-tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
 .note-title {
   margin: 0;
   font-size: clamp(32px, 4vw, 48px);
@@ -1062,6 +1221,53 @@ onBeforeUnmount(() => {
   border-radius: 18px;
   background: rgba(var(--v-theme-on-surface), 0.08);
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
+}
+
+.note-markdown :deep(.note-resource-card) {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  margin: 1.1em 0;
+  border: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+  border-radius: 12px;
+  background: rgba(var(--v-theme-on-surface), 0.03);
+  text-decoration: none !important;
+  color: inherit !important;
+  transition: background 0.15s, border-color 0.15s;
+  cursor: pointer;
+}
+
+.note-markdown :deep(.note-resource-card:hover) {
+  background: rgba(var(--v-theme-primary), 0.06);
+  border-color: rgba(var(--v-theme-primary), 0.3);
+}
+
+.note-markdown :deep(.note-resource-card__icon) {
+  font-size: 28px;
+  color: rgb(var(--v-theme-primary));
+  flex-shrink: 0;
+}
+
+.note-markdown :deep(.note-resource-card__body) {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.note-markdown :deep(.note-resource-card__title) {
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-markdown :deep(.note-resource-card__meta) {
+  font-size: 13px;
+  color: rgba(var(--v-theme-on-surface), 0.6);
 }
 
 @media (max-width: 1100px) {

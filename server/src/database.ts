@@ -117,6 +117,26 @@ export async function initDatabase() {
     `);
 
     await connection.execute(`
+      CREATE TABLE IF NOT EXISTS note_tags (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(64) NOT NULL,
+        user_id VARCHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_user_name (user_id, name),
+        INDEX idx_user_id (user_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS note_tag_map (
+        note_id VARCHAR(36) NOT NULL,
+        tag_id INT NOT NULL,
+        PRIMARY KEY (note_id, tag_id),
+        INDEX idx_tag_id (tag_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id VARCHAR(36) PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
@@ -139,9 +159,56 @@ export async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `)
 
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS bookmarks (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        type VARCHAR(16) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        url VARCHAR(1024) NOT NULL DEFAULT '',
+        ref_id VARCHAR(255) NULL,
+        user_id VARCHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_user_ref (user_id, type, ref_id),
+        INDEX idx_user_id (user_id),
+        INDEX idx_type (type),
+        INDEX idx_created_at (created_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS bookmark_tags (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(64) NOT NULL,
+        user_id VARCHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_user_name (user_id, name),
+        INDEX idx_user_id (user_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS bookmark_tag_map (
+        bookmark_id INT NOT NULL,
+        tag_id INT NOT NULL,
+        PRIMARY KEY (bookmark_id, tag_id),
+        INDEX idx_tag_id (tag_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS user_settings (
+        user_id VARCHAR(36) NOT NULL,
+        k VARCHAR(128) NOT NULL,
+        v TEXT NOT NULL,
+        PRIMARY KEY (user_id, k)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     for (const sql of [
       'ALTER TABLE tokens ADD COLUMN user_agent VARCHAR(512) NULL DEFAULT NULL',
-      'ALTER TABLE tokens ADD COLUMN alias VARCHAR(128) NULL DEFAULT NULL'
+      'ALTER TABLE tokens ADD COLUMN alias VARCHAR(128) NULL DEFAULT NULL',
+      'ALTER TABLE bookmarks ADD COLUMN content MEDIUMTEXT NULL DEFAULT NULL'
     ]) {
       try {
         await connection.execute(sql)

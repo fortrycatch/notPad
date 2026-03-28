@@ -53,7 +53,7 @@ onMounted(async () => {
 
 <template>
   
-    <Normal title="LoliCloud" >
+    <Normal title="LoliAllinone" >
 		<template #bar>
 			<v-menu location="bottom end">
 				<template #activator="{ props }">

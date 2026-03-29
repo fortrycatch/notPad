@@ -27,7 +27,7 @@
           <div class="bookmark-topbar-meta">
             <div class="bookmark-topbar-time">
               <v-icon size="16" class="mr-1">{{ typeIconMap[bookmark.type] || 'mdi-bookmark' }}</v-icon>
-              <span>{{ formatDate(bookmark.created_at) }}</span>
+              <span>{{ formatDate(bookmark.created_at, true) }}</span>
             </div>
           </div>
         </div>
@@ -126,6 +126,7 @@ import MarkdownIt from 'markdown-it'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { server } from '../../server'
+import { formatDate } from '../../utils/format'
 
 interface BookmarkDetail {
   id: number
@@ -194,16 +195,6 @@ const renderedHtml = computed(() => {
   return markdown.render(bookmark.value.content)
 })
 
-const formatDate = (v: string | Date) => {
-  const d = typeof v === 'string' ? new Date(v) : v
-  return d.toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
 
 const openExternalUrl = (url: string) => {
   window.open(url, '_blank', 'noopener,noreferrer')

@@ -339,6 +339,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { server } from '../server'
 import { putWithUploadProgress } from '../utils/putWithUploadProgress'
+import { formatFileSize, formatDate, getFileIcon } from '../utils/format'
+import { downloadUrl } from '../utils/download'
 import AddBookmarkDialog from '../components/compose/AddBookmarkDialog.vue'
 
 type SortKey = 'time_desc' | 'time' | 'name'
@@ -446,42 +448,6 @@ const getSelectedFile = () => {
     return uploadFileValue.value[0] ?? null
   }
   return uploadFileValue.value
-}
-
-const formatDate = (value: string | Date) => {
-  const date = typeof value === 'string' ? new Date(value) : value
-  return date.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
-}
-
-const formatFileSize = (bytes: number) => {
-  if (!bytes) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB']
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  const value = bytes / 1024 ** index
-  return `${value.toFixed(index === 0 ? 0 : 1)} ${units[index]}`
-}
-
-const getFileIcon = (mimeType: string) => {
-  if (mimeType.startsWith('image/')) return 'mdi-file-image-outline'
-  if (mimeType.startsWith('video/')) return 'mdi-file-video-outline'
-  if (mimeType.includes('pdf')) return 'mdi-file-pdf-box'
-  if (mimeType.includes('zip') || mimeType.includes('compressed')) return 'mdi-folder-zip-outline'
-  if (mimeType.startsWith('text/')) return 'mdi-file-document-outline'
-  return 'mdi-file-outline'
-}
-
-const triggerDownload = (url: string, filename: string) => {
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
 }
 
 const getList = async () => {
@@ -635,21 +601,8 @@ const copyFileUrl = async (file: DriveFile) => {
   showMessage('链接已复制')
 }
 
-const downloadFile = async (file: DriveFile) => {
-  try {
-    const response = await fetch(file.public_url)
-    if (!response.ok) {
-      throw new Error(`download failed: ${response.status}`)
-    }
-
-    const blob = await response.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    triggerDownload(blobUrl, file.name)
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
-  } catch (error) {
-    console.error('下载文件失败:', error)
-    window.open(file.public_url, '_blank', 'noopener,noreferrer')
-  }
+const downloadFile = (file: DriveFile) => {
+  downloadUrl(file.public_url)
 }
 
 const openRenameFolder = (folder: DriveFolder) => {

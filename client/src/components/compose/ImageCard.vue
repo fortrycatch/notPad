@@ -19,7 +19,7 @@
       </div>
       <div class="image-info">
         <span>{{ formatFileSize(image.size) }}</span>
-        <span>{{ formatDate(image.created_at) }}</span>
+        <span>{{ formatDate(image.created_at, true) }}</span>
       </div>
     </v-card-text>
   </v-card>
@@ -40,6 +40,7 @@
 <script lang="ts" setup>
 import { computed, ref } from 'vue'
 import ImagePreviewDialog from './ImagePreviewDialog.vue'
+import { formatFileSize, formatDate } from '../../utils/format'
 
 interface TagItem {
   id: number
@@ -65,21 +66,6 @@ const baseName = computed(() => {
   return full.split('/').pop() || full
 })
 
-const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
-const formatDate = (dateString: string) => {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit'
-  })
-}
 </script>
 
 <style scoped>

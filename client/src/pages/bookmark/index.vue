@@ -399,6 +399,7 @@ import { server } from '../../server'
 import { useMainStore } from '../../store/mainStore'
 import ImagePreviewDialog from '../../components/compose/ImagePreviewDialog.vue'
 import FileDownloadDialog from '../../components/compose/FileDownloadDialog.vue'
+import { formatDate } from '../../utils/format'
 
 interface BookmarkItem {
   id: number
@@ -511,10 +512,6 @@ const openExternalUrl = (url: string) => {
   window.open(url, '_blank', 'noopener,noreferrer')
 }
 
-const formatDate = (v: string | Date) => {
-  const d = typeof v === 'string' ? new Date(v) : v
-  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
 
 const loadTags = async () => {
   tags.value = await server.bookmark.listTags.query() as TagItem[]

@@ -376,6 +376,7 @@ export default {
 
 <script lang="ts" setup>
 import { ref, computed } from 'vue'
+import { triggerDownload } from '../../utils/download'
 
 const props = defineProps<{
     modelValue: boolean
@@ -567,12 +568,7 @@ const copyProcessedMarkdown = async () => {
 
 // 下载处理后的图片
 const downloadProcessedImage = () => {
-    const link = document.createElement('a')
-    link.href = processedImageUrl.value
-    link.download = props.imageName
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    triggerDownload(processedImageUrl.value, props.imageName)
 }
 </script>
 

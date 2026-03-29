@@ -26,8 +26,8 @@
           />
           <div class="note-topbar-meta">
             <div class="note-topbar-time">
-              <span>创建于 {{ formatDate(note.created_at) }}</span>
-              <span>更新于 {{ formatDate(note.updated_at) }}</span>
+              <span>创建于 {{ formatDate(note.created_at, true) }}</span>
+              <span>更新于 {{ formatDate(note.updated_at, true) }}</span>
             </div>
           </div>
         </div>
@@ -282,6 +282,7 @@ import NoteMarkdownEditor from '../../components/note/NoteMarkdownEditor.vue'
 import AddBookmarkDialog from '../../components/compose/AddBookmarkDialog.vue'
 import { useMainStore } from '../../store/mainStore'
 import { trpc } from '../../trpc'
+import { getFileIcon, formatFileSize, formatDate } from '../../utils/format'
 
 const router = useRouter()
 const route = useRoute()
@@ -365,22 +366,8 @@ const defaultHeadingOpenRenderer = markdown.renderer.rules.heading_open
 const defaultLinkOpenRenderer = markdown.renderer.rules.link_open
   ?.bind(markdown.renderer.rules)
 
-const getFileIconClass = (mime: string) => {
-  if (!mime) return 'mdi-file-outline'
-  if (mime.startsWith('image/')) return 'mdi-file-image-outline'
-  if (mime.startsWith('video/')) return 'mdi-file-video-outline'
-  if (mime.includes('pdf')) return 'mdi-file-pdf-box'
-  if (mime.includes('zip') || mime.includes('compressed')) return 'mdi-folder-zip-outline'
-  if (mime.startsWith('text/')) return 'mdi-file-document-outline'
-  return 'mdi-file-outline'
-}
-
-const formatCardFileSize = (bytes: number) => {
-  if (!bytes) return ''
-  const units = ['B', 'KB', 'MB', 'GB']
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
+const getFileIconClass = getFileIcon
+const formatCardFileSize = formatFileSize
 
 const renderResourceCard = (data: any): string => {
   const esc = markdown.utils.escapeHtml
@@ -889,17 +876,6 @@ const handleArticleClick = (event: MouseEvent) => {
 const selectMobileTocItem = async (id: string) => {
   showMobileToc.value = false
   await scrollToHeading(id)
-}
-
-const formatDate = (dateString: string | Date) => {
-  const date = typeof dateString === 'string' ? new Date(dateString) : dateString
-  return date.toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit'
-  })
 }
 
 watch(

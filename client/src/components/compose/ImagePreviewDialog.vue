@@ -9,7 +9,7 @@
         <div class="preview-header__meta">
           <div class="preview-title">{{ currentName }}</div>
           <div v-if="imageSize || imageDate" class="preview-subtitle">
-            {{ imageSize ? formatFileSize(imageSize) : '' }}{{ imageSize && imageDate ? ' · ' : '' }}{{ imageDate ? formatDate(imageDate) : '' }}
+            {{ imageSize ? formatFileSize(imageSize) : '' }}{{ imageSize && imageDate ? ' · ' : '' }}{{ imageDate ? formatDate(imageDate, true) : '' }}
           </div>
         </div>
         <v-btn icon="mdi-close" variant="text" @click="close" />
@@ -39,7 +39,7 @@
       </v-card-text>
 
       <v-card-actions class="preview-actions">
-        <v-btn prepend-icon="mdi-download" :loading="downloading" @click="download">
+        <v-btn prepend-icon="mdi-download" @click="download">
           下载
         </v-btn>
         <v-btn prepend-icon="mdi-link-variant" @click="copyUrl">
@@ -146,6 +146,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import OssProcessDialog from './OssProcessDialog.vue'
 import AddBookmarkDialog from './AddBookmarkDialog.vue'
 import { server } from '../../server'
+import { formatFileSize, formatDate } from '../../utils/format'
+import { downloadUrl } from '../../utils/download'
 
 interface TagItem {
   id: number
@@ -174,7 +176,6 @@ const emit = defineEmits<{
 }>()
 
 const currentName = ref(props.imageName)
-const downloading = ref(false)
 const imageTags = ref<TagItem[]>([])
 const internalAllTags = ref<TagItem[]>([])
 const showOssConfig = ref(false)
@@ -196,7 +197,7 @@ watch(() => props.modelValue, async (open) => {
   if (!open || !props.imageId) return
   void loadImageTags()
   if (props.allTags.length === 0) {
-    server.image_bed.getTags.query().then((tags) => {
+    server.image_bed.listTags.query().then((tags: TagItem[]) => {
       internalAllTags.value = tags as TagItem[]
     })
   }
@@ -206,22 +207,6 @@ watch(() => props.modelValue, async (open) => {
 
 const close = () => emit('update:modelValue', false)
 
-const formatFileSize = (bytes: number) => {
-  if (!bytes) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
-}
-
-const formatDate = (dateString: string) => {
-  if (!dateString) return ''
-  const date = new Date(dateString)
-  return date.toLocaleDateString('zh-CN', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit'
-  })
-}
 
 const destroyImageViewer = () => {
   imageViewer?.destroy()
@@ -285,30 +270,8 @@ const confirmRename = async () => {
   }
 }
 
-const triggerDownload = (url: string, filename: string) => {
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-}
-
-const download = async () => {
-  if (downloading.value) return
-  downloading.value = true
-  try {
-    const response = await fetch(props.imageUrl)
-    if (!response.ok) throw new Error(`download failed: ${response.status}`)
-    const blob = await response.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    triggerDownload(blobUrl, currentName.value)
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
-  } catch {
-    window.open(props.imageUrl, '_blank', 'noopener,noreferrer')
-  } finally {
-    downloading.value = false
-  }
+const download = () => {
+  downloadUrl(props.imageUrl)
 }
 
 const copyUrl = () => {

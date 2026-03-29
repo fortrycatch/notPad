@@ -25,7 +25,6 @@
         <v-btn
           color="primary"
           prepend-icon="mdi-download"
-          :loading="downloading"
           :disabled="!fileUrl"
           @click="download"
         >
@@ -47,6 +46,8 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { formatFileSize, getFileIcon } from '../../utils/format'
+import { downloadUrl } from '../../utils/download'
 
 const props = withDefaults(defineProps<{
   modelValue: boolean
@@ -63,51 +64,13 @@ const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void
 }>()
 
-const downloading = ref(false)
-
 const close = () => emit('update:modelValue', false)
 
-const fileIcon = computed(() => {
-  const t = props.mimeType
-  if (t.startsWith('image/')) return 'mdi-file-image-outline'
-  if (t.startsWith('video/')) return 'mdi-file-video-outline'
-  if (t.includes('pdf')) return 'mdi-file-pdf-box'
-  if (t.includes('zip') || t.includes('compressed')) return 'mdi-folder-zip-outline'
-  if (t.startsWith('text/')) return 'mdi-file-document-outline'
-  return 'mdi-file-outline'
-})
+const fileIcon = computed(() => getFileIcon(props.mimeType))
 
-const formatFileSize = (bytes: number) => {
-  if (!bytes) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB']
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
-
-const triggerDownload = (url: string, filename: string) => {
-  const link = document.createElement('a')
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-}
-
-const download = async () => {
-  if (downloading.value || !props.fileUrl) return
-  downloading.value = true
-  try {
-    const response = await fetch(props.fileUrl)
-    if (!response.ok) throw new Error(`download failed: ${response.status}`)
-    const blob = await response.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    triggerDownload(blobUrl, props.fileName)
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000)
-  } catch {
-    window.open(props.fileUrl, '_blank', 'noopener,noreferrer')
-  } finally {
-    downloading.value = false
-  }
+const download = () => {
+  if (!props.fileUrl) return
+  downloadUrl(props.fileUrl)
 }
 
 const copyUrl = () => {

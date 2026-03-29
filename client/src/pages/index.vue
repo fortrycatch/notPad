@@ -157,6 +157,7 @@ import { useMainStore } from '../store/mainStore'
 import { server } from '../server'
 import ImagePreviewDialog from '../components/compose/ImagePreviewDialog.vue'
 import FileDownloadDialog from '../components/compose/FileDownloadDialog.vue'
+import { formatFileSize } from '../utils/format'
 
 type BookmarkSubtype = 'url' | 'image' | 'note' | 'file'
 
@@ -266,12 +267,7 @@ const formatTime = (dateStr: string) => {
   return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-const formatSize = (bytes: number) => {
-  if (!bytes) return ''
-  const units = ['B', 'KB', 'MB', 'GB']
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
+const formatSize = formatFileSize
 
 const fetchPage = async (pageIndex: number): Promise<TimelineItem[]> => {
   return await server.timeline.query(pageIndex) as TimelineItem[]

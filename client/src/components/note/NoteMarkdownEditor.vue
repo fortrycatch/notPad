@@ -210,6 +210,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import ResourcePickerDialog from '../compose/ResourcePickerDialog.vue'
 import { useMainStore } from '../../store/mainStore'
 import { trpc } from '../../trpc'
+import { getFileIcon, formatFileSize } from '../../utils/format'
 
 interface EditorForm {
   title: string
@@ -313,22 +314,8 @@ const defaultHeadingOpenRenderer = markdown.renderer.rules.heading_open
 const defaultLinkOpenRenderer = markdown.renderer.rules.link_open
   ?.bind(markdown.renderer.rules)
 
-const getFileIconClass = (mime: string) => {
-  if (!mime) return 'mdi-file-outline'
-  if (mime.startsWith('image/')) return 'mdi-file-image-outline'
-  if (mime.startsWith('video/')) return 'mdi-file-video-outline'
-  if (mime.includes('pdf')) return 'mdi-file-pdf-box'
-  if (mime.includes('zip') || mime.includes('compressed')) return 'mdi-folder-zip-outline'
-  if (mime.startsWith('text/')) return 'mdi-file-document-outline'
-  return 'mdi-file-outline'
-}
-
-const formatCardFileSize = (bytes: number) => {
-  if (!bytes) return ''
-  const units = ['B', 'KB', 'MB', 'GB']
-  const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  return `${(bytes / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
-}
+const getFileIconClass = getFileIcon
+const formatCardFileSize = formatFileSize
 
 const renderResourceCard = (data: any): string => {
   const esc = markdown.utils.escapeHtml

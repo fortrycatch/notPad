@@ -86,8 +86,8 @@
         :image="image"
         :all-tags="tags"
         @renamed="getList()"
-        @tag-changed="getList()"
       />
+      <!-- 目前刷新机制不太好所以删掉了@tag-changed="getList()" -->
     </div>
 
     <div v-else class="empty-state">

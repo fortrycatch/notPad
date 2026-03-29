@@ -1,6 +1,6 @@
 import { router, needAuth } from '../trpc/trpc.js';
 import { z } from 'zod';
-import { settingData } from '../utils/sqlData.js';
+import { settingData, usageStatsData } from '../utils/sqlData.js';
 
 export default router({
     getAll: needAuth.query(async ({ ctx }) => {
@@ -16,5 +16,11 @@ export default router({
         .input(z.object({ key: z.string().min(1).max(128) }))
         .mutation(async ({ ctx, input }) => {
             return { success: await settingData.remove(ctx.user_id!, input.key) }
-        })
+        }),
+    getUsageStats: needAuth.query(async ({ ctx }) => {
+        return await usageStatsData.get(ctx.user_id!)
+    }),
+    recalculateStats: needAuth.mutation(async ({ ctx }) => {
+        return await usageStatsData.recalculate(ctx.user_id!)
+    }),
 })

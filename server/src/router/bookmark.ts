@@ -1,7 +1,7 @@
 import { router, needAuth } from '../trpc/trpc.js';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
-import { bookmarkData, bookmarkTagData } from '../utils/sqlData.js';
+import { bookmarkData, bookmarkTagData, usageStatsData } from '../utils/sqlData.js';
 import config from '../config.js';
 
 export default router({
@@ -59,6 +59,7 @@ export default router({
             )
         }
 
+        usageStatsData.increment(ctx.user_id, 'stat_bookmarks_count', 1);
         return bookmark
     }),
 
@@ -69,6 +70,7 @@ export default router({
         if (!ok) {
             throw new TRPCError({ code: 'NOT_FOUND', message: '书签不存在' })
         }
+        usageStatsData.increment(ctx.user_id, 'stat_bookmarks_count', -1);
         return true
     }),
 

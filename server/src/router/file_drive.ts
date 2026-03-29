@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { router, needAuth } from '../trpc/trpc.js';
 import { getInfo, getPublicUrl, getUploadUrl } from '../utils/aliOss.js';
-import { DRIVE_PAGE_SIZE, fileData, fileFolderData } from '../utils/sqlData.js';
+import { DRIVE_PAGE_SIZE, fileData, fileFolderData, usageStatsData } from '../utils/sqlData.js';
 
 const driveSortSchema = z.enum(['time', 'time_desc', 'name']);
 const driveSearchScopeSchema = z.enum(['current', 'all']);
@@ -86,6 +86,8 @@ export default router({
             throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: '文件登记失败' });
         }
 
+        usageStatsData.increment(ctx.user_id, 'stat_files_count', 1);
+        usageStatsData.increment(ctx.user_id, 'stat_files_size', size);
         return toPublicFile(file);
     }),
     createFolder: needAuth.input(z.object({

@@ -928,6 +928,80 @@ export const settingData = {
   }
 }
 
+export interface UsageStats {
+  notes_count: number
+  bookmarks_count: number
+  images_count: number
+  images_size: number
+  files_count: number
+  files_size: number
+}
+
+const STAT_KEYS = [
+  'stat_notes_count',
+  'stat_bookmarks_count',
+  'stat_images_count',
+  'stat_images_size',
+  'stat_files_count',
+  'stat_files_size',
+] as const
+
+export const usageStatsData = {
+  recalculate: async (userId: string): Promise<UsageStats> => {
+    const [[notes], [bookmarks], [images], [files]] = await Promise.all([
+      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS cnt FROM notes WHERE user_id = ?', [userId]),
+      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS cnt FROM bookmarks WHERE user_id = ?', [userId]),
+      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS cnt, COALESCE(SUM(size), 0) AS total_size FROM images WHERE user_id = ?', [userId]),
+      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS cnt, COALESCE(SUM(size), 0) AS total_size FROM drive_files WHERE user_id = ?', [userId]),
+    ])
+
+    const stats: UsageStats = {
+      notes_count: Number(notes[0].cnt),
+      bookmarks_count: Number(bookmarks[0].cnt),
+      images_count: Number(images[0].cnt),
+      images_size: Number(images[0].total_size),
+      files_count: Number(files[0].cnt),
+      files_size: Number(files[0].total_size),
+    }
+
+    await Promise.all(STAT_KEYS.map(k =>
+      settingData.set(userId, k, String(stats[k.replace('stat_', '') as keyof UsageStats]))
+    ))
+
+    return stats
+  },
+
+  get: async (userId: string): Promise<UsageStats> => {
+    const [rows] = await pool.execute<UserSetting[]>(
+      `SELECT k, v FROM user_settings WHERE user_id = ? AND k IN (${STAT_KEYS.map(() => '?').join(',')})`,
+      [userId, ...STAT_KEYS]
+    )
+
+    if (rows.length === 0) {
+      return await usageStatsData.recalculate(userId)
+    }
+
+    const map: Record<string, string> = {}
+    for (const row of rows) map[row.k] = row.v
+
+    return {
+      notes_count: Number(map.stat_notes_count || 0),
+      bookmarks_count: Number(map.stat_bookmarks_count || 0),
+      images_count: Number(map.stat_images_count || 0),
+      images_size: Number(map.stat_images_size || 0),
+      files_count: Number(map.stat_files_count || 0),
+      files_size: Number(map.stat_files_size || 0),
+    }
+  },
+
+  increment: async (userId: string, key: typeof STAT_KEYS[number], delta: number): Promise<void> => {
+    await pool.execute(
+      'INSERT INTO user_settings (user_id, k, v) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v = CAST(CAST(v AS SIGNED) + ? AS CHAR)',
+      [userId, key, String(delta), delta]
+    )
+  },
+}
+
 export interface TimelineItem extends RowDataPacket {
   type: 'note' | 'image' | 'file' | 'bookmark'
   id: string

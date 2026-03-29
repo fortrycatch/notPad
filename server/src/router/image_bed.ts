@@ -2,7 +2,7 @@ import { router, needAuth } from '../trpc/trpc.js';
 import { z } from 'zod';
 import { getInfo, getUploadUrl, test } from '../utils/aliOss.js';
 import { TRPCError } from '@trpc/server';
-import { imageData, imageTagData } from '../utils/sqlData.js';
+import { imageData, imageTagData, usageStatsData } from '../utils/sqlData.js';
 
 function mimeToExtension(mime: string) {
     const table: Record<string, string> = {
@@ -38,7 +38,11 @@ export default router({
         if (!info) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: '图片不存在' });
         }
-        return await imageData.addImage(input.name, input.filename, info.res.headers['content-length'], ctx.user_id, input.remark);
+        const size = Number(info.res.headers['content-length'] || 0);
+        const result = await imageData.addImage(input.name, input.filename, size, ctx.user_id, input.remark);
+        usageStatsData.increment(ctx.user_id, 'stat_images_count', 1);
+        usageStatsData.increment(ctx.user_id, 'stat_images_size', size);
+        return result;
     }),
     rename: needAuth.input(z.object({
         id: z.number().int().positive(),

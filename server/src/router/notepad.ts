@@ -1,4 +1,4 @@
-import { noteData, noteTagData } from '../utils/sqlData.js';
+import { noteData, noteTagData, usageStatsData } from '../utils/sqlData.js';
 import { router, publicPro, needAuth } from '../trpc/trpc.js';
 import { TRPCError } from '@trpc/server';
 import z from 'zod';
@@ -24,7 +24,9 @@ export default router({
         title: z.string(),
         content: z.string()
     })).mutation(async ({ input, ctx }) => {
-        return await noteData.createNote(input.title, input.content, ctx.user_id);
+        const note = await noteData.createNote(input.title, input.content, ctx.user_id);
+        usageStatsData.increment(ctx.user_id, 'stat_notes_count', 1);
+        return note;
     }),
 
     updateNote: needAuth.input(z.object({
@@ -46,6 +48,7 @@ export default router({
         if (!success) {
             throw new TRPCError({ code: 'NOT_FOUND', message: '笔记不存在' });
         }
+        usageStatsData.increment(ctx.user_id, 'stat_notes_count', -1);
         return { success: true };
     }),
 

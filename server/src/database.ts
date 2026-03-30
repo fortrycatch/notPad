@@ -23,82 +23,6 @@ export const pool = mysql.createPool({
   queueLimit: 0
 })
 
-function isMysqlError(error: unknown, codes: string[], errnos: number[] = []) {
-  const err = error as { code?: string; errno?: number }
-  return codes.includes(err.code || '') || errnos.includes(err.errno || -1)
-}
-
-async function executeIgnoring(
-  connection: mysql.PoolConnection,
-  sql: string,
-  codes: string[],
-  errnos: number[] = []
-) {
-  try {
-    await connection.execute(sql)
-  } catch (error) {
-    if (!isMysqlError(error, codes, errnos)) throw error
-  }
-}
-
-async function applyLegacySchemaPatches(connection: mysql.PoolConnection) {
-  for (const sql of [
-    'ALTER TABLE tokens ADD COLUMN user_agent VARCHAR(512) NULL DEFAULT NULL',
-    'ALTER TABLE tokens ADD COLUMN alias VARCHAR(128) NULL DEFAULT NULL',
-    'ALTER TABLE bookmarks ADD COLUMN content MEDIUMTEXT NULL DEFAULT NULL',
-    'ALTER TABLE notes ADD COLUMN group_id VARCHAR(36) NULL',
-    'ALTER TABLE notes ADD INDEX idx_group_id (group_id)',
-    'ALTER TABLE images ADD COLUMN group_id VARCHAR(36) NULL',
-    'ALTER TABLE images ADD INDEX idx_group_id (group_id)',
-    'ALTER TABLE drive_folders ADD COLUMN group_id VARCHAR(36) NULL',
-    'ALTER TABLE drive_folders ADD INDEX idx_group_id (group_id)',
-    'ALTER TABLE drive_files ADD COLUMN group_id VARCHAR(36) NULL',
-    'ALTER TABLE drive_files ADD INDEX idx_group_id (group_id)',
-    'ALTER TABLE bookmarks ADD COLUMN group_id VARCHAR(36) NULL',
-    'ALTER TABLE bookmarks ADD INDEX idx_group_id (group_id)',
-    'ALTER TABLE note_tags ADD COLUMN group_id VARCHAR(36) NULL',
-    'ALTER TABLE note_tags ADD INDEX idx_group_id (group_id)',
-    'ALTER TABLE image_tags ADD COLUMN group_id VARCHAR(36) NULL',
-    'ALTER TABLE image_tags ADD INDEX idx_group_id (group_id)',
-    'ALTER TABLE bookmark_tags ADD COLUMN group_id VARCHAR(36) NULL',
-    'ALTER TABLE bookmark_tags ADD INDEX idx_group_id (group_id)',
-    "ALTER TABLE note_tags ADD COLUMN scope_key VARCHAR(80) NOT NULL DEFAULT ''",
-    "ALTER TABLE image_tags ADD COLUMN scope_key VARCHAR(80) NOT NULL DEFAULT ''",
-    "ALTER TABLE bookmark_tags ADD COLUMN scope_key VARCHAR(80) NOT NULL DEFAULT ''",
-    "ALTER TABLE users ADD COLUMN meta TEXT NULL",
-    "ALTER TABLE `groups` ADD COLUMN meta TEXT NULL",
-  ]) {
-    try {
-      await connection.execute(sql)
-    } catch (e: unknown) {
-      const err = e as { code?: string; errno?: number }
-      if (err.code !== 'ER_DUP_FIELDNAME' && err.errno !== 1060
-        && err.code !== 'ER_DUP_KEYNAME' && err.errno !== 1061) throw e
-    }
-  }
-}
-
-async function migrateLegacyTagScopes(connection: mysql.PoolConnection) {
-  for (const table of ['note_tags', 'image_tags', 'bookmark_tags']) {
-    await connection.execute(
-      `UPDATE ${table} SET scope_key = CASE WHEN group_id IS NULL THEN CONCAT('user:', user_id) ELSE CONCAT('group:', group_id) END WHERE scope_key = ''`
-    )
-
-    await executeIgnoring(connection, `ALTER TABLE ${table} DROP INDEX uk_user_name`, ['ER_CANT_DROP_FIELD_OR_KEY'], [1091])
-
-    try {
-      await connection.execute(`ALTER TABLE ${table} ADD UNIQUE KEY uk_scope_name (scope_key, name)`)
-    } catch (error) {
-      if (isMysqlError(error, ['ER_DUP_KEYNAME'], [1061])) continue
-      if (isMysqlError(error, ['ER_DUP_ENTRY'], [1062])) {
-        console.warn(`${table} 存在同作用域重名数据，跳过 uk_scope_name 唯一索引创建`)
-        continue
-      }
-      throw error
-    }
-  }
-}
-
 // 初始化数据库表
 export async function initDatabase() {
   try {
@@ -374,9 +298,6 @@ export async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
-    await applyLegacySchemaPatches(connection)
-    await migrateLegacyTagScopes(connection)
-    
     connection.release()
     console.log('数据库初始化完成')
   } catch (error) {

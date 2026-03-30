@@ -245,6 +245,18 @@ export async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS group_chat_messages (
+        id VARCHAR(36) PRIMARY KEY,
+        group_id VARCHAR(36) NOT NULL,
+        user_id VARCHAR(36) NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_group_created (group_id, created_at),
+        INDEX idx_group_id (group_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     for (const sql of [
       'ALTER TABLE tokens ADD COLUMN user_agent VARCHAR(512) NULL DEFAULT NULL',
       'ALTER TABLE tokens ADD COLUMN alias VARCHAR(128) NULL DEFAULT NULL',

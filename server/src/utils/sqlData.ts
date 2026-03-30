@@ -1074,6 +1074,7 @@ export const groupData = {
     return result.affectedRows > 0
   },
   remove: async (id: string): Promise<boolean> => {
+    await pool.execute('DELETE FROM group_chat_messages WHERE group_id = ?', [id])
     await pool.execute('DELETE FROM group_members WHERE group_id = ?', [id])
     await pool.execute('DELETE FROM group_invites WHERE group_id = ?', [id])
     const [result] = await pool.execute<ResultSetHeader>('DELETE FROM `groups` WHERE id = ?', [id])
@@ -1126,6 +1127,77 @@ export const groupMemberData = {
       [role, groupId, userId]
     )
     return result.affectedRows > 0
+  },
+}
+
+export interface GroupChatMessageRow extends RowDataPacket {
+  id: string
+  group_id: string
+  user_id: string
+  content: string
+  created_at: Date
+  user_name?: string
+  user_meta?: unknown
+}
+
+export type GroupChatMessageWithAvatar = {
+  id: string
+  group_id: string
+  user_id: string
+  content: string
+  created_at: Date
+  user_name?: string
+  user_avatar: string
+}
+
+function chatRowWithAvatar(raw: GroupChatMessageRow): GroupChatMessageWithAvatar {
+  const meta = parseMeta(raw.user_meta)
+  const av = meta.avatar
+  const user_avatar = typeof av === 'string' ? av : ''
+  return {
+    id: raw.id,
+    group_id: raw.group_id,
+    user_id: raw.user_id,
+    content: raw.content,
+    created_at: raw.created_at,
+    user_name: raw.user_name,
+    user_avatar,
+  }
+}
+
+export const groupChatData = {
+  insert: async (id: string, groupId: string, userId: string, content: string): Promise<GroupChatMessageWithAvatar> => {
+    await pool.execute<ResultSetHeader>(
+      'INSERT INTO group_chat_messages (id, group_id, user_id, content) VALUES (?, ?, ?, ?)',
+      [id, groupId, userId, content]
+    )
+    const [rows] = await pool.execute<GroupChatMessageRow[]>(
+      `SELECT m.*, u.name AS user_name, u.meta AS user_meta FROM group_chat_messages m
+       INNER JOIN users u ON m.user_id = u.id WHERE m.id = ?`,
+      [id]
+    )
+    return chatRowWithAvatar(rows[0])
+  },
+  list: async (groupId: string, opts: { beforeId: string | null; limit: number }): Promise<GroupChatMessageWithAvatar[]> => {
+    const limit = Math.min(Math.max(opts.limit, 1), 100)
+    if (opts.beforeId) {
+      const [rows] = await pool.execute<GroupChatMessageRow[]>(
+        `SELECT m.*, u.name AS user_name, u.meta AS user_meta FROM group_chat_messages m
+         INNER JOIN users u ON m.user_id = u.id
+         WHERE m.group_id = ? AND m.created_at < (SELECT created_at FROM group_chat_messages WHERE id = ? AND group_id = ?)
+         ORDER BY m.created_at DESC LIMIT ?`,
+        [groupId, opts.beforeId, groupId, limit]
+      )
+      return rows.reverse().map(chatRowWithAvatar)
+    }
+    const [rows] = await pool.execute<GroupChatMessageRow[]>(
+      `SELECT m.*, u.name AS user_name, u.meta AS user_meta FROM group_chat_messages m
+       INNER JOIN users u ON m.user_id = u.id
+       WHERE m.group_id = ?
+       ORDER BY m.created_at DESC LIMIT ?`,
+      [groupId, limit]
+    )
+    return rows.reverse().map(chatRowWithAvatar)
   },
 }
 

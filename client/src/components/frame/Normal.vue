@@ -9,7 +9,7 @@
             :temporary="isMobile">
             <slot name="drawer" />
         </v-navigation-drawer>
-        <v-main>
+        <v-main class="v-main-flex">
             <div class="main">
                 <slot />
                 <router-view v-slot="{ Component }">
@@ -44,7 +44,16 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.v-main-flex {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
 .main {
     padding: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
 }
 </style>

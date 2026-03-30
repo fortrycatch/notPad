@@ -107,6 +107,14 @@ watch(() => mainStore.authenticated, (val) => {
 				<v-list-item nav link title="图床" prepend-icon="mdi-image" to="/image" />
 				<v-list-item nav link title="网盘" prepend-icon="mdi-folder-multiple" to="/file" />
 				<v-list-item nav link title="书签" prepend-icon="mdi-bookmark-multiple" to="/bookmark" />
+				<v-list-item
+					v-if="mainStore.isGroupContext"
+					nav
+					link
+					title="群聊"
+					prepend-icon="mdi-forum"
+					to="/group/chat"
+				/>
 				<v-list-item nav link title="群组" prepend-icon="mdi-account-group" to="/group" />
 				<v-list-item nav link title="账户" prepend-icon="mdi-information" to="/account" />
 				<v-list-item nav link title="设置" prepend-icon="mdi-cog" to="/setting" />

@@ -7,6 +7,7 @@ import file_drive from './file_drive.js';
 import bookmark from './bookmark.js';
 import setting from './setting.js';
 import group from './group.js';
+import groupChat from './groupChat.js';
 import { timelineData } from '../utils/sqlData.js';
 const appRouter = router({
     hello: publicPro.input(z.string()).query(({ input }) => {
@@ -25,6 +26,7 @@ const appRouter = router({
     bookmark,
     setting,
     group,
+    groupChat,
 })
 export default appRouter;
 export type AppRouter = typeof appRouter;

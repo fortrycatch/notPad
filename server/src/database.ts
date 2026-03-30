@@ -205,16 +205,73 @@ export async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS \`groups\` (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        created_by VARCHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_created_by (created_by)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS group_members (
+        group_id VARCHAR(36) NOT NULL,
+        user_id VARCHAR(36) NOT NULL,
+        role ENUM('owner','admin','editor','viewer') NOT NULL DEFAULT 'editor',
+        joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (group_id, user_id),
+        INDEX idx_user_id (user_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS group_invites (
+        id VARCHAR(36) PRIMARY KEY,
+        group_id VARCHAR(36) NOT NULL,
+        invite_code VARCHAR(64) NULL UNIQUE,
+        invited_user_id VARCHAR(36) NULL,
+        role ENUM('admin','editor','viewer') NOT NULL DEFAULT 'editor',
+        created_by VARCHAR(36) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NULL,
+        used_at TIMESTAMP NULL,
+        INDEX idx_group_id (group_id),
+        INDEX idx_invited_user_id (invited_user_id),
+        INDEX idx_invite_code (invite_code)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     for (const sql of [
       'ALTER TABLE tokens ADD COLUMN user_agent VARCHAR(512) NULL DEFAULT NULL',
       'ALTER TABLE tokens ADD COLUMN alias VARCHAR(128) NULL DEFAULT NULL',
-      'ALTER TABLE bookmarks ADD COLUMN content MEDIUMTEXT NULL DEFAULT NULL'
+      'ALTER TABLE bookmarks ADD COLUMN content MEDIUMTEXT NULL DEFAULT NULL',
+      'ALTER TABLE notes ADD COLUMN group_id VARCHAR(36) NULL',
+      'ALTER TABLE notes ADD INDEX idx_group_id (group_id)',
+      'ALTER TABLE images ADD COLUMN group_id VARCHAR(36) NULL',
+      'ALTER TABLE images ADD INDEX idx_group_id (group_id)',
+      'ALTER TABLE drive_folders ADD COLUMN group_id VARCHAR(36) NULL',
+      'ALTER TABLE drive_folders ADD INDEX idx_group_id (group_id)',
+      'ALTER TABLE drive_files ADD COLUMN group_id VARCHAR(36) NULL',
+      'ALTER TABLE drive_files ADD INDEX idx_group_id (group_id)',
+      'ALTER TABLE bookmarks ADD COLUMN group_id VARCHAR(36) NULL',
+      'ALTER TABLE bookmarks ADD INDEX idx_group_id (group_id)',
+      'ALTER TABLE note_tags ADD COLUMN group_id VARCHAR(36) NULL',
+      'ALTER TABLE note_tags ADD INDEX idx_group_id (group_id)',
+      'ALTER TABLE image_tags ADD COLUMN group_id VARCHAR(36) NULL',
+      'ALTER TABLE image_tags ADD INDEX idx_group_id (group_id)',
+      'ALTER TABLE bookmark_tags ADD COLUMN group_id VARCHAR(36) NULL',
+      'ALTER TABLE bookmark_tags ADD INDEX idx_group_id (group_id)',
     ]) {
       try {
         await connection.execute(sql)
       } catch (e: unknown) {
         const err = e as { code?: string; errno?: number }
-        if (err.code !== 'ER_DUP_FIELDNAME' && err.errno !== 1060) throw e
+        if (err.code !== 'ER_DUP_FIELDNAME' && err.errno !== 1060
+          && err.code !== 'ER_DUP_KEYNAME' && err.errno !== 1061) throw e
       }
     }
     

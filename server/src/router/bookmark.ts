@@ -1,4 +1,4 @@
-import { router, needAuth } from '../trpc/trpc.js';
+import { router, needAuth, needGroupEditor } from '../trpc/trpc.js';
 import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { bookmarkData, bookmarkTagData, usageStatsData } from '../utils/sqlData.js';
@@ -13,7 +13,8 @@ export default router({
         type: z.enum(['url', 'image', 'note', 'file']).nullable().optional()
     })).query(async ({ input, ctx }) => {
         return await bookmarkData.list(
-            ctx.user_id,
+            ctx.user_id!,
+            ctx.group_id,
             input.offset,
             input.sort || 'time_desc',
             input.search || '',
@@ -22,7 +23,7 @@ export default router({
         )
     }),
 
-    add: needAuth.input(z.object({
+    add: needGroupEditor.input(z.object({
         type: z.enum(['url', 'image', 'note', 'file']),
         title: z.string().trim().min(1).max(255),
         description: z.string().max(10000).optional(),
@@ -32,12 +33,12 @@ export default router({
         tag_ids: z.array(z.number().int().positive()).optional()
     })).mutation(async ({ input, ctx }) => {
         if (input.ref_id) {
-            const existing = await bookmarkData.findByRef(ctx.user_id, input.type, input.ref_id)
+            const existing = await bookmarkData.findByRef(ctx.user_id!, ctx.group_id, input.type, input.ref_id)
             if (existing) {
                 throw new TRPCError({ code: 'CONFLICT', message: '该资源已收藏' })
             }
         } else if (input.type === 'url' && input.url) {
-            const existing = await bookmarkData.findByUrl(ctx.user_id, input.url)
+            const existing = await bookmarkData.findByUrl(ctx.user_id!, ctx.group_id, input.url)
             if (existing) {
                 throw new TRPCError({ code: 'CONFLICT', message: '该链接已收藏' })
             }
@@ -49,7 +50,8 @@ export default router({
             input.description || '',
             input.url || '',
             input.ref_id ?? null,
-            ctx.user_id,
+            ctx.user_id!,
+            ctx.group_id,
             input.content ?? null
         )
 
@@ -59,18 +61,18 @@ export default router({
             )
         }
 
-        usageStatsData.increment(ctx.user_id, 'stat_bookmarks_count', 1);
+        usageStatsData.increment(ctx.user_id!, ctx.group_id, 'stat_bookmarks_count', 1);
         return bookmark
     }),
 
-    remove: needAuth.input(z.object({
+    remove: needGroupEditor.input(z.object({
         id: z.number().int().positive()
     })).mutation(async ({ input, ctx }) => {
-        const ok = await bookmarkData.remove(input.id, ctx.user_id)
+        const ok = await bookmarkData.remove(input.id, ctx.user_id!, ctx.group_id)
         if (!ok) {
             throw new TRPCError({ code: 'NOT_FOUND', message: '书签不存在' })
         }
-        usageStatsData.increment(ctx.user_id, 'stat_bookmarks_count', -1);
+        usageStatsData.increment(ctx.user_id!, ctx.group_id, 'stat_bookmarks_count', -1);
         return true
     }),
 
@@ -78,7 +80,7 @@ export default router({
         type: z.enum(['url', 'image', 'note', 'file']),
         ref_id: z.string().max(255)
     })).query(async ({ input, ctx }) => {
-        const bookmark = await bookmarkData.findByRef(ctx.user_id, input.type, input.ref_id)
+        const bookmark = await bookmarkData.findByRef(ctx.user_id!, ctx.group_id, input.type, input.ref_id)
         return bookmark ? { bookmarked: true, id: bookmark.id } : { bookmarked: false, id: null }
     }),
 
@@ -122,7 +124,7 @@ export default router({
     getById: needAuth.input(z.object({
         id: z.number().int().positive()
     })).query(async ({ input, ctx }) => {
-        const bookmark = await bookmarkData.getById(input.id, ctx.user_id)
+        const bookmark = await bookmarkData.getById(input.id, ctx.user_id!, ctx.group_id)
         if (!bookmark) {
             throw new TRPCError({ code: 'NOT_FOUND', message: '书签不存在' })
         }
@@ -130,19 +132,19 @@ export default router({
     }),
 
     listTags: needAuth.query(async ({ ctx }) => {
-        return await bookmarkTagData.list(ctx.user_id)
+        return await bookmarkTagData.list(ctx.user_id!, ctx.group_id)
     }),
 
-    createTag: needAuth.input(z.object({
+    createTag: needGroupEditor.input(z.object({
         name: z.string().trim().min(1).max(64)
     })).mutation(async ({ input, ctx }) => {
-        return await bookmarkTagData.create(input.name, ctx.user_id)
+        return await bookmarkTagData.create(input.name, ctx.user_id!, ctx.group_id)
     }),
 
-    deleteTag: needAuth.input(z.object({
+    deleteTag: needGroupEditor.input(z.object({
         id: z.number().int().positive()
     })).mutation(async ({ input, ctx }) => {
-        const ok = await bookmarkTagData.remove(input.id, ctx.user_id)
+        const ok = await bookmarkTagData.remove(input.id, ctx.user_id!, ctx.group_id)
         if (!ok) {
             throw new TRPCError({ code: 'NOT_FOUND', message: '标签不存在' })
         }
@@ -155,14 +157,14 @@ export default router({
         return await bookmarkTagData.getTagsForBookmark(input.bookmark_id)
     }),
 
-    addTagToBookmark: needAuth.input(z.object({
+    addTagToBookmark: needGroupEditor.input(z.object({
         bookmark_id: z.number().int().positive(),
         tag_id: z.number().int().positive()
     })).mutation(async ({ input }) => {
         return await bookmarkTagData.addTagToBookmark(input.bookmark_id, input.tag_id)
     }),
 
-    removeTagFromBookmark: needAuth.input(z.object({
+    removeTagFromBookmark: needGroupEditor.input(z.object({
         bookmark_id: z.number().int().positive(),
         tag_id: z.number().int().positive()
     })).mutation(async ({ input }) => {

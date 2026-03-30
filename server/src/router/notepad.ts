@@ -1,5 +1,5 @@
 import { noteData, noteTagData, usageStatsData } from '../utils/sqlData.js';
-import { router, publicPro, needAuth } from '../trpc/trpc.js';
+import { router, needAuth, needGroupEditor } from '../trpc/trpc.js';
 import { TRPCError } from '@trpc/server';
 import z from 'zod';
 export default router({
@@ -7,65 +7,65 @@ export default router({
         page: z.number(),
         tag_id: z.number().int().positive().nullable().optional()
     })).query(async ({ input, ctx }) => {
-        return await noteData.getNotes(ctx.user_id, input.page, input.tag_id ?? null);
+        return await noteData.getNotes(ctx.user_id!, ctx.group_id, input.page, input.tag_id ?? null);
     }),
 
     getNoteById: needAuth.input(z.object({
         id: z.string()
     })).query(async ({ input, ctx }) => {
-        const note = await noteData.getNoteById(input.id, ctx.user_id);
+        const note = await noteData.getNoteById(input.id, ctx.user_id!, ctx.group_id);
         if (!note) {
             throw new TRPCError({ code: 'NOT_FOUND', message: '笔记不存在' });
         }
         return note;
     }),
 
-    createNote: needAuth.input(z.object({
+    createNote: needGroupEditor.input(z.object({
         title: z.string(),
         content: z.string()
     })).mutation(async ({ input, ctx }) => {
-        const note = await noteData.createNote(input.title, input.content, ctx.user_id);
-        usageStatsData.increment(ctx.user_id, 'stat_notes_count', 1);
+        const note = await noteData.createNote(input.title, input.content, ctx.user_id!, ctx.group_id);
+        usageStatsData.increment(ctx.user_id!, ctx.group_id, 'stat_notes_count', 1);
         return note;
     }),
 
-    updateNote: needAuth.input(z.object({
+    updateNote: needGroupEditor.input(z.object({
         id: z.string(),
         title: z.string(),
         content: z.string()
     })).mutation(async ({ input, ctx }) => {
-        const note = await noteData.updateNote(input.id, input.title, input.content, ctx.user_id);
+        const note = await noteData.updateNote(input.id, input.title, input.content, ctx.user_id!, ctx.group_id);
         if (!note) {
             throw new TRPCError({ code: 'NOT_FOUND', message: '笔记不存在' });
         }
         return note;
     }),
 
-    deleteNote: needAuth.input(z.object({
+    deleteNote: needGroupEditor.input(z.object({
         id: z.string()
     })).mutation(async ({ input, ctx }) => {
-        const success = await noteData.deleteNote(input.id, ctx.user_id);
+        const success = await noteData.deleteNote(input.id, ctx.user_id!, ctx.group_id);
         if (!success) {
             throw new TRPCError({ code: 'NOT_FOUND', message: '笔记不存在' });
         }
-        usageStatsData.increment(ctx.user_id, 'stat_notes_count', -1);
+        usageStatsData.increment(ctx.user_id!, ctx.group_id, 'stat_notes_count', -1);
         return { success: true };
     }),
 
     listTags: needAuth.query(async ({ ctx }) => {
-        return await noteTagData.list(ctx.user_id);
+        return await noteTagData.list(ctx.user_id!, ctx.group_id);
     }),
 
-    createTag: needAuth.input(z.object({
+    createTag: needGroupEditor.input(z.object({
         name: z.string().trim().min(1).max(64)
     })).mutation(async ({ input, ctx }) => {
-        return await noteTagData.create(input.name, ctx.user_id);
+        return await noteTagData.create(input.name, ctx.user_id!, ctx.group_id);
     }),
 
-    deleteTag: needAuth.input(z.object({
+    deleteTag: needGroupEditor.input(z.object({
         id: z.number().int().positive()
     })).mutation(async ({ input, ctx }) => {
-        const ok = await noteTagData.remove(input.id, ctx.user_id);
+        const ok = await noteTagData.remove(input.id, ctx.user_id!, ctx.group_id);
         if (!ok) {
             throw new TRPCError({ code: 'NOT_FOUND', message: '标签不存在' });
         }
@@ -78,14 +78,14 @@ export default router({
         return await noteTagData.getTagsForNote(input.note_id);
     }),
 
-    addTagToNote: needAuth.input(z.object({
+    addTagToNote: needGroupEditor.input(z.object({
         note_id: z.string(),
         tag_id: z.number().int().positive()
     })).mutation(async ({ input }) => {
         return await noteTagData.addTagToNote(input.note_id, input.tag_id);
     }),
 
-    removeTagFromNote: needAuth.input(z.object({
+    removeTagFromNote: needGroupEditor.input(z.object({
         note_id: z.string(),
         tag_id: z.number().int().positive()
     })).mutation(async ({ input }) => {

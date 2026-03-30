@@ -414,6 +414,10 @@ watch(
   { immediate: true }
 )
 
+watch(() => mainStore.refreshTrigger, () => {
+  if (authenticated.value && authReady.value) void loadInitial()
+})
+
 onMounted(() => {
   window.addEventListener('scroll', handleScroll, { passive: true })
 })

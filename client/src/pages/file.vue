@@ -341,6 +341,9 @@ import { server } from '../server'
 import { putWithUploadProgress } from '../utils/putWithUploadProgress'
 import { formatFileSize, formatDate, getFileIcon } from '../utils/format'
 import { downloadUrl } from '../utils/download'
+import { useMainStore } from '../store/mainStore'
+
+const mainStore = useMainStore()
 import AddBookmarkDialog from '../components/compose/AddBookmarkDialog.vue'
 
 type SortKey = 'time_desc' | 'time' | 'name'
@@ -687,6 +690,10 @@ const handleScroll = () => {
     }
   }, 200)
 }
+
+watch(() => mainStore.refreshTrigger, () => {
+  void getList()
+})
 
 onMounted(() => {
   window.addEventListener('scroll', handleScroll, { passive: true })

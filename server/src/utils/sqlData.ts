@@ -1,7 +1,12 @@
 import { pool } from '../database.js'
 import type { RowDataPacket, ResultSetHeader } from 'mysql2'
 import crypto from 'node:crypto'
-// 笔记接口定义
+
+export function ownerWhere(userId: string, groupId: string | null): { sql: string; params: string[] } {
+  if (groupId) return { sql: 'group_id = ?', params: [groupId] }
+  return { sql: 'user_id = ? AND group_id IS NULL', params: [userId] }
+}
+
 export interface Note extends RowDataPacket {
   id: string
   title: string
@@ -31,17 +36,17 @@ export interface Image extends RowDataPacket {
   remark: string
 }
 
-// 笔记相关的数据库操作
 export const noteData = {
-  getNotes: async (userId: string, offset: number, tagId: number | null = null): Promise<NoteListItem[]> => {
-    const params: (string | number)[] = [userId]
+  getNotes: async (userId: string, groupId: string | null, offset: number, tagId: number | null = null): Promise<NoteListItem[]> => {
+    const ow = ownerWhere(userId, groupId)
+    const params: (string | number)[] = [...ow.params]
     let query: string
 
     if (tagId) {
-      query = 'SELECT n.id, n.title, LEFT(n.content,100) AS content, n.created_at, n.updated_at FROM notes n INNER JOIN note_tag_map m ON n.id = m.note_id WHERE n.user_id = ? AND m.tag_id = ?'
+      query = `SELECT n.id, n.title, LEFT(n.content,100) AS content, n.created_at, n.updated_at FROM notes n INNER JOIN note_tag_map m ON n.id = m.note_id WHERE n.${ow.sql} AND m.tag_id = ?`
       params.push(tagId)
     } else {
-      query = 'SELECT id, title, LEFT(content,100) AS content, created_at, updated_at FROM notes WHERE user_id = ?'
+      query = `SELECT id, title, LEFT(content,100) AS content, created_at, updated_at FROM notes WHERE ${ow.sql}`
     }
 
     query += ' ORDER BY updated_at DESC LIMIT 30 OFFSET ?'
@@ -51,72 +56,41 @@ export const noteData = {
     return rows
   },
 
-  // 获取笔记详情
-  getNoteById: async (id: string, userId: string): Promise<Note | null> => {
-    try {
-      const [rows] = await pool.execute<Note[]>(
-        'SELECT * FROM notes WHERE id = ? AND user_id = ?',
-        [id, userId]
-      )
-      return rows.length > 0 ? rows[0] : null
-    } catch (error) {
-      console.error('获取笔记详情失败:', error)
-      throw error
-    }
+  getNoteById: async (id: string, userId: string, groupId: string | null = null): Promise<Note | null> => {
+    const ow = ownerWhere(userId, groupId)
+    const [rows] = await pool.execute<Note[]>(
+      `SELECT * FROM notes WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
+    )
+    return rows[0] ?? null
   },
 
-  // 创建笔记
-  createNote: async (title: string, content: string, userId: string): Promise<Note | null> => {
-    try {
-      // 使用时间戳作为ID，如果需要更好的唯一性，可以考虑使用 crypto.randomUUID()
-      const id = crypto.hash('sha1',userId+Date.now().toString()+crypto.randomUUID()).slice(0,36)
-      await pool.execute<ResultSetHeader>(
-        'INSERT INTO notes (id, title, content, user_id) VALUES (?, ?, ?, ?)',
-        [id, title, content, userId]
-      )
-      
-      // 返回创建的笔记
-      return await noteData.getNoteById(id, userId)
-    } catch (error) {
-      console.error('创建笔记失败:', error)
-      throw error
-    }
+  createNote: async (title: string, content: string, userId: string, groupId: string | null = null): Promise<Note | null> => {
+    const id = crypto.hash('sha1', userId + Date.now().toString() + crypto.randomUUID()).slice(0, 36)
+    await pool.execute<ResultSetHeader>(
+      'INSERT INTO notes (id, title, content, user_id, group_id) VALUES (?, ?, ?, ?, ?)',
+      [id, title, content, userId, groupId]
+    )
+    return await noteData.getNoteById(id, userId, groupId)
   },
 
-  // 更新笔记
-  updateNote: async (id: string, title: string, content: string, userId: string): Promise<Note | null> => {
-    try {
-      const [result] = await pool.execute<ResultSetHeader>(
-        'UPDATE notes SET title = ?, content = ? WHERE id = ? AND user_id = ?',
-        [title, content, id, userId]
-      )
-      
-      // 检查是否更新成功
-      if (result.affectedRows === 0) {
-        return null
-      }
-      
-      // 返回更新后的笔记
-      return await noteData.getNoteById(id, userId)
-    } catch (error) {
-      console.error('更新笔记失败:', error)
-      throw error
-    }
+  updateNote: async (id: string, title: string, content: string, userId: string, groupId: string | null = null): Promise<Note | null> => {
+    const ow = ownerWhere(userId, groupId)
+    const [result] = await pool.execute<ResultSetHeader>(
+      `UPDATE notes SET title = ?, content = ? WHERE id = ? AND ${ow.sql}`,
+      [title, content, id, ...ow.params]
+    )
+    if (result.affectedRows === 0) return null
+    return await noteData.getNoteById(id, userId, groupId)
   },
 
-  // 删除笔记
-  deleteNote: async (id: string, userId: string): Promise<boolean> => {
-    try {
-      const [result] = await pool.execute<ResultSetHeader>(
-        'DELETE FROM notes WHERE id = ? AND user_id = ?',
-        [id, userId]
-      )
-      
-      return result.affectedRows > 0
-    } catch (error) {
-      console.error('删除笔记失败:', error)
-      throw error
-    }
+  deleteNote: async (id: string, userId: string, groupId: string | null = null): Promise<boolean> => {
+    const ow = ownerWhere(userId, groupId)
+    const [result] = await pool.execute<ResultSetHeader>(
+      `DELETE FROM notes WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
+    )
+    return result.affectedRows > 0
   }
 }
 export interface User extends RowDataPacket {
@@ -333,22 +307,23 @@ export const tokenData = {
   }
 }
 export const imageData = {
-  getImageList: async (userId: string, offset: number, sort: 'time' | 'time_desc' | 'name' = 'time_desc', search: string = '', tagId: number | null = null): Promise<Image[]> => {
+  getImageList: async (userId: string, groupId: string | null, offset: number, sort: 'time' | 'time_desc' | 'name' = 'time_desc', search: string = '', tagId: number | null = null): Promise<Image[]> => {
     const sortMap: Record<string, string> = {
       'time': 'i.created_at',
       'time_desc': 'i.created_at DESC',
       'name': 'i.name'
     }
     const sortSql = sortMap[sort] || 'i.created_at DESC'
+    const ow = ownerWhere(userId, groupId)
 
     let query: string
-    const params: (string | number)[] = [userId]
+    const params: (string | number)[] = [...ow.params]
 
     if (tagId) {
-      query = 'SELECT i.* FROM images i INNER JOIN image_tag_map m ON i.id = m.image_id WHERE i.user_id = ? AND m.tag_id = ?'
+      query = `SELECT i.* FROM images i INNER JOIN image_tag_map m ON i.id = m.image_id WHERE i.${ow.sql} AND m.tag_id = ?`
       params.push(tagId)
     } else {
-      query = 'SELECT i.* FROM images i WHERE i.user_id = ?'
+      query = `SELECT i.* FROM images i WHERE i.${ow.sql}`
     }
 
     if (search && search.trim() !== '') {
@@ -362,17 +337,18 @@ export const imageData = {
     const [rows] = await pool.execute<Image[]>(query, params)
     return rows
   },
-  addImage: async (name: string, url: string, size: number, userId: string, remark: string): Promise<ResultSetHeader> => {
+  addImage: async (name: string, url: string, size: number, userId: string, groupId: string | null, remark: string): Promise<ResultSetHeader> => {
     const [result] = await pool.execute<ResultSetHeader>(
-      'INSERT INTO images (name, url, size, user_id, remark) VALUES (?, ?, ?, ?, ?)',
-      [name, url, size, userId, remark]
+      'INSERT INTO images (name, url, size, user_id, group_id, remark) VALUES (?, ?, ?, ?, ?, ?)',
+      [name, url, size, userId, groupId, remark]
     )
     return result
   },
-  renameImage: async (id: number, name: string, userId: string): Promise<boolean> => {
+  renameImage: async (id: number, name: string, userId: string, groupId: string | null = null): Promise<boolean> => {
+    const ow = ownerWhere(userId, groupId)
     const [result] = await pool.execute<ResultSetHeader>(
-      'UPDATE images SET name = ? WHERE id = ? AND user_id = ?',
-      [name, id, userId]
+      `UPDATE images SET name = ? WHERE id = ? AND ${ow.sql}`,
+      [name, id, ...ow.params]
     )
     return result.affectedRows > 0
   }
@@ -386,17 +362,18 @@ export interface ImageTag extends RowDataPacket {
 }
 
 export const imageTagData = {
-  list: async (userId: string): Promise<ImageTag[]> => {
+  list: async (userId: string, groupId: string | null = null): Promise<ImageTag[]> => {
+    const ow = ownerWhere(userId, groupId)
     const [rows] = await pool.execute<ImageTag[]>(
-      'SELECT * FROM image_tags WHERE user_id = ? ORDER BY name',
-      [userId]
+      `SELECT * FROM image_tags WHERE ${ow.sql} ORDER BY name`,
+      ow.params
     )
     return rows
   },
-  create: async (name: string, userId: string): Promise<ImageTag> => {
+  create: async (name: string, userId: string, groupId: string | null = null): Promise<ImageTag> => {
     const [result] = await pool.execute<ResultSetHeader>(
-      'INSERT INTO image_tags (name, user_id) VALUES (?, ?)',
-      [name, userId]
+      'INSERT INTO image_tags (name, user_id, group_id) VALUES (?, ?, ?)',
+      [name, userId, groupId]
     )
     const [rows] = await pool.execute<ImageTag[]>(
       'SELECT * FROM image_tags WHERE id = ?',
@@ -404,11 +381,12 @@ export const imageTagData = {
     )
     return rows[0]
   },
-  remove: async (id: number, userId: string): Promise<boolean> => {
+  remove: async (id: number, userId: string, groupId: string | null = null): Promise<boolean> => {
     await pool.execute('DELETE FROM image_tag_map WHERE tag_id = ?', [id])
+    const ow = ownerWhere(userId, groupId)
     const [result] = await pool.execute<ResultSetHeader>(
-      'DELETE FROM image_tags WHERE id = ? AND user_id = ?',
-      [id, userId]
+      `DELETE FROM image_tags WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
     )
     return result.affectedRows > 0
   },
@@ -449,17 +427,18 @@ export interface NoteTag extends RowDataPacket {
 }
 
 export const noteTagData = {
-  list: async (userId: string): Promise<NoteTag[]> => {
+  list: async (userId: string, groupId: string | null = null): Promise<NoteTag[]> => {
+    const ow = ownerWhere(userId, groupId)
     const [rows] = await pool.execute<NoteTag[]>(
-      'SELECT * FROM note_tags WHERE user_id = ? ORDER BY name',
-      [userId]
+      `SELECT * FROM note_tags WHERE ${ow.sql} ORDER BY name`,
+      ow.params
     )
     return rows
   },
-  create: async (name: string, userId: string): Promise<NoteTag> => {
+  create: async (name: string, userId: string, groupId: string | null = null): Promise<NoteTag> => {
     const [result] = await pool.execute<ResultSetHeader>(
-      'INSERT INTO note_tags (name, user_id) VALUES (?, ?)',
-      [name, userId]
+      'INSERT INTO note_tags (name, user_id, group_id) VALUES (?, ?, ?)',
+      [name, userId, groupId]
     )
     const [rows] = await pool.execute<NoteTag[]>(
       'SELECT * FROM note_tags WHERE id = ?',
@@ -467,11 +446,12 @@ export const noteTagData = {
     )
     return rows[0]
   },
-  remove: async (id: number, userId: string): Promise<boolean> => {
+  remove: async (id: number, userId: string, groupId: string | null = null): Promise<boolean> => {
     await pool.execute('DELETE FROM note_tag_map WHERE tag_id = ?', [id])
+    const ow = ownerWhere(userId, groupId)
     const [result] = await pool.execute<ResultSetHeader>(
-      'DELETE FROM note_tags WHERE id = ? AND user_id = ?',
-      [id, userId]
+      `DELETE FROM note_tags WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
     )
     return result.affectedRows > 0
   },
@@ -539,115 +519,89 @@ const getDriveSortSql = (sort: 'time' | 'time_desc' | 'name' = 'time_desc') => {
 }
 
 export const fileFolderData = {
-  getFolderById: async (id: string, userId: string): Promise<DriveFolder | null> => {
-    try {
-      const [rows] = await pool.execute<DriveFolder[]>(
-        'SELECT * FROM drive_folders WHERE id = ? AND user_id = ?',
-        [id, userId]
-      )
-      return rows.length > 0 ? rows[0] : null
-    } catch (error) {
-      console.error('获取网盘文件夹失败:', error)
-      throw error
-    }
+  getFolderById: async (id: string, userId: string, groupId: string | null = null): Promise<DriveFolder | null> => {
+    const ow = ownerWhere(userId, groupId)
+    const [rows] = await pool.execute<DriveFolder[]>(
+      `SELECT * FROM drive_folders WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
+    )
+    return rows[0] ?? null
   },
-  createFolder: async (name: string, parentId: string | null, userId: string): Promise<DriveFolder | null> => {
-    try {
-      const id = createDriveId()
-      await pool.execute<ResultSetHeader>(
-        'INSERT INTO drive_folders (id, name, parent_id, user_id) VALUES (?, ?, ?, ?)',
-        [id, name, parentId, userId]
-      )
-      return await fileFolderData.getFolderById(id, userId)
-    } catch (error) {
-      console.error('创建网盘文件夹失败:', error)
-      throw error
-    }
+  createFolder: async (name: string, parentId: string | null, userId: string, groupId: string | null = null): Promise<DriveFolder | null> => {
+    const id = createDriveId()
+    await pool.execute<ResultSetHeader>(
+      'INSERT INTO drive_folders (id, name, parent_id, user_id, group_id) VALUES (?, ?, ?, ?, ?)',
+      [id, name, parentId, userId, groupId]
+    )
+    return await fileFolderData.getFolderById(id, userId, groupId)
   },
   listByParent: async (
     userId: string,
+    groupId: string | null,
     parentId: string | null,
     sort: 'time' | 'time_desc' | 'name' = 'name',
     search: string = '',
     offset: number = 0
   ): Promise<DriveFolder[]> => {
-    try {
-      let query = 'SELECT * FROM drive_folders WHERE user_id = ? AND parent_id <=> ?'
-      const params: Array<string | number | null> = [userId, parentId]
+    const ow = ownerWhere(userId, groupId)
+    let query = `SELECT * FROM drive_folders WHERE ${ow.sql} AND parent_id <=> ?`
+    const params: Array<string | number | null> = [...ow.params, parentId]
 
-      if (search.trim() !== '') {
-        query += ' AND name LIKE ?'
-        params.push(`%${search.trim()}%`)
-      }
-
-      query += ` ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`
-      params.push(offset * DRIVE_PAGE_SIZE)
-
-      const [rows] = await pool.execute<DriveFolder[]>(query, params)
-      return rows
-    } catch (error) {
-      console.error('获取网盘文件夹列表失败:', error)
-      throw error
+    if (search.trim() !== '') {
+      query += ' AND name LIKE ?'
+      params.push(`%${search.trim()}%`)
     }
+
+    query += ` ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`
+    params.push(offset * DRIVE_PAGE_SIZE)
+
+    const [rows] = await pool.execute<DriveFolder[]>(query, params)
+    return rows
   },
   searchFolders: async (
     userId: string,
+    groupId: string | null,
     search: string,
     sort: 'time' | 'time_desc' | 'name' = 'name',
     offset: number = 0
   ): Promise<DriveFolder[]> => {
-    try {
-      const [rows] = await pool.execute<DriveFolder[]>(
-        `SELECT * FROM drive_folders WHERE user_id = ? AND name LIKE ? ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`,
-        [userId, `%${search.trim()}%`, offset * DRIVE_PAGE_SIZE]
-      )
-      return rows
-    } catch (error) {
-      console.error('全局搜索网盘文件夹失败:', error)
-      throw error
-    }
+    const ow = ownerWhere(userId, groupId)
+    const [rows] = await pool.execute<DriveFolder[]>(
+      `SELECT * FROM drive_folders WHERE ${ow.sql} AND name LIKE ? ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`,
+      [...ow.params, `%${search.trim()}%`, offset * DRIVE_PAGE_SIZE]
+    )
+    return rows
   },
-  renameFolder: async (id: string, name: string, userId: string): Promise<boolean> => {
+  renameFolder: async (id: string, name: string, userId: string, groupId: string | null = null): Promise<boolean> => {
+    const ow = ownerWhere(userId, groupId)
     const [result] = await pool.execute<ResultSetHeader>(
-      'UPDATE drive_folders SET name = ? WHERE id = ? AND user_id = ?',
-      [name, id, userId]
+      `UPDATE drive_folders SET name = ? WHERE id = ? AND ${ow.sql}`,
+      [name, id, ...ow.params]
     )
     return result.affectedRows > 0
   },
-  getBreadcrumbs: async (folderId: string | null, userId: string): Promise<DriveFolder[]> => {
-    try {
-      if (!folderId) return []
-
-      const breadcrumbs: DriveFolder[] = []
-      let currentId: string | null = folderId
-
-      while (currentId) {
-        const folder = await fileFolderData.getFolderById(currentId, userId)
-        if (!folder) break
-        breadcrumbs.unshift(folder)
-        currentId = folder.parent_id
-      }
-
-      return breadcrumbs
-    } catch (error) {
-      console.error('获取网盘面包屑失败:', error)
-      throw error
+  getBreadcrumbs: async (folderId: string | null, userId: string, groupId: string | null = null): Promise<DriveFolder[]> => {
+    if (!folderId) return []
+    const breadcrumbs: DriveFolder[] = []
+    let currentId: string | null = folderId
+    while (currentId) {
+      const folder = await fileFolderData.getFolderById(currentId, userId, groupId)
+      if (!folder) break
+      breadcrumbs.unshift(folder)
+      currentId = folder.parent_id
     }
+    return breadcrumbs
   }
 }
 
 export const fileData = {
-  getFileById: async (id: number, userId: string): Promise<DriveFile | null> => {
-    try {
-      const [rows] = await pool.execute<DriveFile[]>(
-        'SELECT * FROM drive_files WHERE id = ? AND user_id = ?',
-        [id, userId]
-      )
-      return rows.length > 0 ? rows[0] : null
-    } catch (error) {
-      console.error('获取网盘文件失败:', error)
-      throw error
-    }
+  getFileById: async (id: number, userId: string, groupId: string | null = null): Promise<DriveFile | null> => {
+    const ow = ownerWhere(userId, groupId)
+    const [rows] = await pool.execute<DriveFile[]>(
+      `SELECT * FROM drive_files WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
+    )
+    return rows[0] ?? null
   },
   addFile: async (
     name: string,
@@ -655,74 +609,64 @@ export const fileData = {
     size: number,
     mimeType: string,
     folderId: string | null,
-    userId: string
+    userId: string,
+    groupId: string | null = null
   ): Promise<DriveFile | null> => {
-    try {
-      const [result] = await pool.execute<ResultSetHeader>(
-        'INSERT INTO drive_files (name, oss_key, size, mime_type, folder_id, user_id) VALUES (?, ?, ?, ?, ?, ?)',
-        [name, ossKey, size, mimeType, folderId, userId]
-      )
-      return await fileData.getFileById(result.insertId, userId)
-    } catch (error) {
-      console.error('添加网盘文件失败:', error)
-      throw error
-    }
-  },
-  renameFile: async (id: number, name: string, userId: string): Promise<boolean> => {
     const [result] = await pool.execute<ResultSetHeader>(
-      'UPDATE drive_files SET name = ? WHERE id = ? AND user_id = ?',
-      [name, id, userId]
+      'INSERT INTO drive_files (name, oss_key, size, mime_type, folder_id, user_id, group_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [name, ossKey, size, mimeType, folderId, userId, groupId]
+    )
+    return await fileData.getFileById(result.insertId, userId, groupId)
+  },
+  renameFile: async (id: number, name: string, userId: string, groupId: string | null = null): Promise<boolean> => {
+    const ow = ownerWhere(userId, groupId)
+    const [result] = await pool.execute<ResultSetHeader>(
+      `UPDATE drive_files SET name = ? WHERE id = ? AND ${ow.sql}`,
+      [name, id, ...ow.params]
     )
     return result.affectedRows > 0
   },
   listByFolder: async (
     userId: string,
+    groupId: string | null,
     folderId: string | null,
     sort: 'time' | 'time_desc' | 'name' = 'time_desc',
     search: string = '',
     offset: number = 0
   ): Promise<DriveFile[]> => {
-    try {
-      let query = 'SELECT * FROM drive_files WHERE user_id = ? AND folder_id <=> ?'
-      const params: Array<string | number | null> = [userId, folderId]
+    const ow = ownerWhere(userId, groupId)
+    let query = `SELECT * FROM drive_files WHERE ${ow.sql} AND folder_id <=> ?`
+    const params: Array<string | number | null> = [...ow.params, folderId]
 
-      if (search.trim() !== '') {
-        query += ' AND name LIKE ?'
-        params.push(`%${search.trim()}%`)
-      }
-
-      query += ` ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`
-      params.push(offset * DRIVE_PAGE_SIZE)
-
-      const [rows] = await pool.execute<DriveFile[]>(query, params)
-      return rows
-    } catch (error) {
-      console.error('获取网盘文件列表失败:', error)
-      throw error
+    if (search.trim() !== '') {
+      query += ' AND name LIKE ?'
+      params.push(`%${search.trim()}%`)
     }
+
+    query += ` ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`
+    params.push(offset * DRIVE_PAGE_SIZE)
+
+    const [rows] = await pool.execute<DriveFile[]>(query, params)
+    return rows
   },
   searchFiles: async (
     userId: string,
+    groupId: string | null,
     search: string,
     offset: number = 0,
     folderId: string | null = null,
     sort: 'time' | 'time_desc' | 'name' = 'time_desc',
     searchAll: boolean = false
   ): Promise<DriveFile[]> => {
-    try {
-      if (searchAll) {
-        const [rows] = await pool.execute<DriveFile[]>(
-          `SELECT * FROM drive_files WHERE user_id = ? AND name LIKE ? ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`,
-          [userId, `%${search.trim()}%`, offset * DRIVE_PAGE_SIZE]
-        )
-        return rows
-      }
-
-      return await fileData.listByFolder(userId, folderId, sort, search, offset)
-    } catch (error) {
-      console.error('搜索网盘文件失败:', error)
-      throw error
+    if (searchAll) {
+      const ow = ownerWhere(userId, groupId)
+      const [rows] = await pool.execute<DriveFile[]>(
+        `SELECT * FROM drive_files WHERE ${ow.sql} AND name LIKE ? ORDER BY ${getDriveSortSql(sort)} LIMIT ${DRIVE_PAGE_SIZE} OFFSET ?`,
+        [...ow.params, `%${search.trim()}%`, offset * DRIVE_PAGE_SIZE]
+      )
+      return rows
     }
+    return await fileData.listByFolder(userId, groupId, folderId, sort, search, offset)
   }
 }
 
@@ -743,6 +687,7 @@ const BOOKMARK_PAGE_SIZE = 30
 export const bookmarkData = {
   list: async (
     userId: string,
+    groupId: string | null,
     offset: number,
     sort: 'time' | 'time_desc' | 'name' = 'time_desc',
     search: string = '',
@@ -755,14 +700,15 @@ export const bookmarkData = {
       name: 'b.title'
     }
     const sortSql = sortMap[sort] || 'b.created_at DESC'
-    const params: (string | number)[] = [userId]
+    const ow = ownerWhere(userId, groupId)
+    const params: (string | number)[] = [...ow.params]
     let query: string
 
     if (tagId) {
-      query = 'SELECT b.* FROM bookmarks b INNER JOIN bookmark_tag_map m ON b.id = m.bookmark_id WHERE b.user_id = ? AND m.tag_id = ?'
+      query = `SELECT b.* FROM bookmarks b INNER JOIN bookmark_tag_map m ON b.id = m.bookmark_id WHERE b.${ow.sql} AND m.tag_id = ?`
       params.push(tagId)
     } else {
-      query = 'SELECT b.* FROM bookmarks b WHERE b.user_id = ?'
+      query = `SELECT b.* FROM bookmarks b WHERE b.${ow.sql}`
     }
 
     if (type) {
@@ -789,11 +735,12 @@ export const bookmarkData = {
     url: string,
     refId: string | null,
     userId: string,
+    groupId: string | null = null,
     content: string | null = null
   ): Promise<Bookmark> => {
     const [result] = await pool.execute<ResultSetHeader>(
-      'INSERT INTO bookmarks (type, title, description, content, url, ref_id, user_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [type, title, description, content, url, refId, userId]
+      'INSERT INTO bookmarks (type, title, description, content, url, ref_id, user_id, group_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [type, title, description, content, url, refId, userId, groupId]
     )
     const [rows] = await pool.execute<Bookmark[]>(
       'SELECT * FROM bookmarks WHERE id = ?',
@@ -801,34 +748,38 @@ export const bookmarkData = {
     )
     return rows[0]
   },
-  getById: async (id: number, userId: string): Promise<Bookmark | null> => {
+  getById: async (id: number, userId: string, groupId: string | null = null): Promise<Bookmark | null> => {
+    const ow = ownerWhere(userId, groupId)
     const [rows] = await pool.execute<Bookmark[]>(
-      'SELECT * FROM bookmarks WHERE id = ? AND user_id = ?',
-      [id, userId]
+      `SELECT * FROM bookmarks WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
     )
     return rows[0] ?? null
   },
-  remove: async (id: number, userId: string): Promise<boolean> => {
+  remove: async (id: number, userId: string, groupId: string | null = null): Promise<boolean> => {
     await pool.execute('DELETE FROM bookmark_tag_map WHERE bookmark_id = ?', [id])
+    const ow = ownerWhere(userId, groupId)
     const [result] = await pool.execute<ResultSetHeader>(
-      'DELETE FROM bookmarks WHERE id = ? AND user_id = ?',
-      [id, userId]
+      `DELETE FROM bookmarks WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
     )
     return result.affectedRows > 0
   },
-  findByRef: async (userId: string, type: string, refId: string): Promise<Bookmark | null> => {
+  findByRef: async (userId: string, groupId: string | null, type: string, refId: string): Promise<Bookmark | null> => {
+    const ow = ownerWhere(userId, groupId)
     const [rows] = await pool.execute<Bookmark[]>(
-      'SELECT * FROM bookmarks WHERE user_id = ? AND type = ? AND ref_id = ?',
-      [userId, type, refId]
+      `SELECT * FROM bookmarks WHERE ${ow.sql} AND type = ? AND ref_id = ?`,
+      [...ow.params, type, refId]
     )
-    return rows.length > 0 ? rows[0] : null
+    return rows[0] ?? null
   },
-  findByUrl: async (userId: string, url: string): Promise<Bookmark | null> => {
+  findByUrl: async (userId: string, groupId: string | null, url: string): Promise<Bookmark | null> => {
+    const ow = ownerWhere(userId, groupId)
     const [rows] = await pool.execute<Bookmark[]>(
-      'SELECT * FROM bookmarks WHERE user_id = ? AND type = ? AND url = ?',
-      [userId, 'url', url]
+      `SELECT * FROM bookmarks WHERE ${ow.sql} AND type = ? AND url = ?`,
+      [...ow.params, 'url', url]
     )
-    return rows.length > 0 ? rows[0] : null
+    return rows[0] ?? null
   }
 }
 
@@ -840,17 +791,18 @@ export interface BookmarkTag extends RowDataPacket {
 }
 
 export const bookmarkTagData = {
-  list: async (userId: string): Promise<BookmarkTag[]> => {
+  list: async (userId: string, groupId: string | null = null): Promise<BookmarkTag[]> => {
+    const ow = ownerWhere(userId, groupId)
     const [rows] = await pool.execute<BookmarkTag[]>(
-      'SELECT * FROM bookmark_tags WHERE user_id = ? ORDER BY name',
-      [userId]
+      `SELECT * FROM bookmark_tags WHERE ${ow.sql} ORDER BY name`,
+      ow.params
     )
     return rows
   },
-  create: async (name: string, userId: string): Promise<BookmarkTag> => {
+  create: async (name: string, userId: string, groupId: string | null = null): Promise<BookmarkTag> => {
     const [result] = await pool.execute<ResultSetHeader>(
-      'INSERT INTO bookmark_tags (name, user_id) VALUES (?, ?)',
-      [name, userId]
+      'INSERT INTO bookmark_tags (name, user_id, group_id) VALUES (?, ?, ?)',
+      [name, userId, groupId]
     )
     const [rows] = await pool.execute<BookmarkTag[]>(
       'SELECT * FROM bookmark_tags WHERE id = ?',
@@ -858,11 +810,12 @@ export const bookmarkTagData = {
     )
     return rows[0]
   },
-  remove: async (id: number, userId: string): Promise<boolean> => {
+  remove: async (id: number, userId: string, groupId: string | null = null): Promise<boolean> => {
     await pool.execute('DELETE FROM bookmark_tag_map WHERE tag_id = ?', [id])
+    const ow = ownerWhere(userId, groupId)
     const [result] = await pool.execute<ResultSetHeader>(
-      'DELETE FROM bookmark_tags WHERE id = ? AND user_id = ?',
-      [id, userId]
+      `DELETE FROM bookmark_tags WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
     )
     return result.affectedRows > 0
   },
@@ -947,12 +900,13 @@ const STAT_KEYS = [
 ] as const
 
 export const usageStatsData = {
-  recalculate: async (userId: string): Promise<UsageStats> => {
+  recalculate: async (userId: string, groupId: string | null = null): Promise<UsageStats> => {
+    const ow = ownerWhere(userId, groupId)
     const [[notes], [bookmarks], [images], [files]] = await Promise.all([
-      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS cnt FROM notes WHERE user_id = ?', [userId]),
-      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS cnt FROM bookmarks WHERE user_id = ?', [userId]),
-      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS cnt, COALESCE(SUM(size), 0) AS total_size FROM images WHERE user_id = ?', [userId]),
-      pool.execute<RowDataPacket[]>('SELECT COUNT(*) AS cnt, COALESCE(SUM(size), 0) AS total_size FROM drive_files WHERE user_id = ?', [userId]),
+      pool.execute<RowDataPacket[]>(`SELECT COUNT(*) AS cnt FROM notes WHERE ${ow.sql}`, ow.params),
+      pool.execute<RowDataPacket[]>(`SELECT COUNT(*) AS cnt FROM bookmarks WHERE ${ow.sql}`, ow.params),
+      pool.execute<RowDataPacket[]>(`SELECT COUNT(*) AS cnt, COALESCE(SUM(size), 0) AS total_size FROM images WHERE ${ow.sql}`, ow.params),
+      pool.execute<RowDataPacket[]>(`SELECT COUNT(*) AS cnt, COALESCE(SUM(size), 0) AS total_size FROM drive_files WHERE ${ow.sql}`, ow.params),
     ])
 
     const stats: UsageStats = {
@@ -964,21 +918,23 @@ export const usageStatsData = {
       files_size: Number(files[0].total_size),
     }
 
+    const settingsOwner = groupId ?? userId
     await Promise.all(STAT_KEYS.map(k =>
-      settingData.set(userId, k, String(stats[k.replace('stat_', '') as keyof UsageStats]))
+      settingData.set(settingsOwner, k, String(stats[k.replace('stat_', '') as keyof UsageStats]))
     ))
 
     return stats
   },
 
-  get: async (userId: string): Promise<UsageStats> => {
+  get: async (userId: string, groupId: string | null = null): Promise<UsageStats> => {
+    const settingsOwner = groupId ?? userId
     const [rows] = await pool.execute<UserSetting[]>(
       `SELECT k, v FROM user_settings WHERE user_id = ? AND k IN (${STAT_KEYS.map(() => '?').join(',')})`,
-      [userId, ...STAT_KEYS]
+      [settingsOwner, ...STAT_KEYS]
     )
 
     if (rows.length === 0) {
-      return await usageStatsData.recalculate(userId)
+      return await usageStatsData.recalculate(userId, groupId)
     }
 
     const map: Record<string, string> = {}
@@ -994,10 +950,11 @@ export const usageStatsData = {
     }
   },
 
-  increment: async (userId: string, key: typeof STAT_KEYS[number], delta: number): Promise<void> => {
+  increment: async (userId: string, groupId: string | null, key: typeof STAT_KEYS[number], delta: number): Promise<void> => {
+    const settingsOwner = groupId ?? userId
     await pool.execute(
       'INSERT INTO user_settings (user_id, k, v) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v = CAST(CAST(v AS SIGNED) + ? AS CHAR)',
-      [userId, key, String(delta), delta]
+      [settingsOwner, key, String(delta), delta]
     )
   },
 }
@@ -1017,25 +974,192 @@ export interface TimelineItem extends RowDataPacket {
 const TIMELINE_PAGE_SIZE = 30
 
 export const timelineData = {
-  getTimeline: async (userId: string, offset: number): Promise<TimelineItem[]> => {
+  getTimeline: async (userId: string, groupId: string | null, offset: number): Promise<TimelineItem[]> => {
     const C = 'COLLATE utf8mb4_unicode_ci'
     const cap = offset * TIMELINE_PAGE_SIZE + TIMELINE_PAGE_SIZE
+    const ow = ownerWhere(userId, groupId)
     const [rows] = await pool.execute<TimelineItem[]>(
       `(SELECT 'note' ${C} AS type, id ${C} AS id, title ${C} AS name, LEFT(content, 100) ${C} AS summary, NULL AS url, 0 AS size, created_at, NULL AS bookmark_subtype, NULL AS ref_id
-        FROM notes WHERE user_id = ? ORDER BY created_at DESC LIMIT ${cap})
+        FROM notes WHERE ${ow.sql} ORDER BY created_at DESC LIMIT ${cap})
        UNION ALL
        (SELECT 'image' ${C} AS type, CAST(id AS CHAR) ${C} AS id, name ${C} AS name, '' ${C} AS summary, url ${C} AS url, size, created_at, NULL AS bookmark_subtype, NULL AS ref_id
-        FROM images WHERE user_id = ? ORDER BY created_at DESC LIMIT ${cap})
+        FROM images WHERE ${ow.sql} ORDER BY created_at DESC LIMIT ${cap})
        UNION ALL
        (SELECT 'file' ${C} AS type, CAST(id AS CHAR) ${C} AS id, name ${C} AS name, mime_type ${C} AS summary, oss_key ${C} AS url, size, created_at, NULL AS bookmark_subtype, NULL AS ref_id
-        FROM drive_files WHERE user_id = ? ORDER BY created_at DESC LIMIT ${cap})
+        FROM drive_files WHERE ${ow.sql} ORDER BY created_at DESC LIMIT ${cap})
        UNION ALL
        (SELECT 'bookmark' ${C} AS type, CAST(b.id AS CHAR) ${C} AS id, b.title ${C} AS name, LEFT(COALESCE(b.description, ''), 100) ${C} AS summary, b.url ${C} AS url, 0 AS size, b.created_at, b.type ${C} AS bookmark_subtype, b.ref_id ${C} AS ref_id
-        FROM bookmarks b WHERE b.user_id = ? ORDER BY created_at DESC LIMIT ${cap})
+        FROM bookmarks b WHERE b.${ow.sql} ORDER BY created_at DESC LIMIT ${cap})
        ORDER BY created_at DESC
        LIMIT ${TIMELINE_PAGE_SIZE} OFFSET ${offset * TIMELINE_PAGE_SIZE}`,
-      [userId, userId, userId, userId]
+      [...ow.params, ...ow.params, ...ow.params, ...ow.params]
     )
     return rows
   }
+}
+
+// ─── Group helpers ───
+
+export interface Group extends RowDataPacket {
+  id: string
+  name: string
+  description: string
+  created_by: string
+  created_at: Date
+  updated_at: Date
+}
+
+export interface GroupMember extends RowDataPacket {
+  group_id: string
+  user_id: string
+  role: 'owner' | 'admin' | 'editor' | 'viewer'
+  joined_at: Date
+  user_name?: string
+  user_email?: string
+}
+
+export interface GroupInvite extends RowDataPacket {
+  id: string
+  group_id: string
+  invite_code: string | null
+  invited_user_id: string | null
+  role: 'admin' | 'editor' | 'viewer'
+  created_by: string
+  created_at: Date
+  expires_at: Date | null
+  used_at: Date | null
+}
+
+export const groupData = {
+  create: async (id: string, name: string, description: string, createdBy: string): Promise<Group> => {
+    await pool.execute<ResultSetHeader>(
+      'INSERT INTO `groups` (id, name, description, created_by) VALUES (?, ?, ?, ?)',
+      [id, name, description, createdBy]
+    )
+    const [rows] = await pool.execute<Group[]>('SELECT * FROM `groups` WHERE id = ?', [id])
+    return rows[0]
+  },
+  getById: async (id: string): Promise<Group | null> => {
+    const [rows] = await pool.execute<Group[]>('SELECT * FROM `groups` WHERE id = ?', [id])
+    return rows[0] ?? null
+  },
+  listByUser: async (userId: string): Promise<(Group & { role: string })[]> => {
+    const [rows] = await pool.execute<(Group & { role: string } & RowDataPacket)[]>(
+      'SELECT g.*, gm.role FROM `groups` g INNER JOIN group_members gm ON g.id = gm.group_id WHERE gm.user_id = ? ORDER BY g.updated_at DESC',
+      [userId]
+    )
+    return rows
+  },
+  update: async (id: string, name: string, description: string): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'UPDATE `groups` SET name = ?, description = ? WHERE id = ?',
+      [name, description, id]
+    )
+    return result.affectedRows > 0
+  },
+  remove: async (id: string): Promise<boolean> => {
+    await pool.execute('DELETE FROM group_members WHERE group_id = ?', [id])
+    await pool.execute('DELETE FROM group_invites WHERE group_id = ?', [id])
+    const [result] = await pool.execute<ResultSetHeader>('DELETE FROM `groups` WHERE id = ?', [id])
+    return result.affectedRows > 0
+  },
+}
+
+export const groupMemberData = {
+  add: async (groupId: string, userId: string, role: string): Promise<void> => {
+    await pool.execute(
+      'INSERT INTO group_members (group_id, user_id, role) VALUES (?, ?, ?)',
+      [groupId, userId, role]
+    )
+  },
+  remove: async (groupId: string, userId: string): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'DELETE FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, userId]
+    )
+    return result.affectedRows > 0
+  },
+  getMembership: async (groupId: string, userId: string): Promise<GroupMember | null> => {
+    const [rows] = await pool.execute<GroupMember[]>(
+      'SELECT * FROM group_members WHERE group_id = ? AND user_id = ?',
+      [groupId, userId]
+    )
+    return rows[0] ?? null
+  },
+  listMembers: async (groupId: string): Promise<GroupMember[]> => {
+    const [rows] = await pool.execute<GroupMember[]>(
+      `SELECT gm.*, u.name AS user_name, u.email AS user_email
+       FROM group_members gm INNER JOIN users u ON gm.user_id = u.id
+       WHERE gm.group_id = ? ORDER BY FIELD(gm.role,'owner','admin','editor','viewer'), gm.joined_at`,
+      [groupId]
+    )
+    return rows
+  },
+  updateRole: async (groupId: string, userId: string, role: string): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>(
+      'UPDATE group_members SET role = ? WHERE group_id = ? AND user_id = ?',
+      [role, groupId, userId]
+    )
+    return result.affectedRows > 0
+  },
+}
+
+export const groupInviteData = {
+  createLinkInvite: async (
+    id: string, groupId: string, inviteCode: string, role: string, createdBy: string, expiresAt: Date | null
+  ): Promise<GroupInvite> => {
+    await pool.execute<ResultSetHeader>(
+      'INSERT INTO group_invites (id, group_id, invite_code, role, created_by, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, groupId, inviteCode, role, createdBy, expiresAt]
+    )
+    const [rows] = await pool.execute<GroupInvite[]>('SELECT * FROM group_invites WHERE id = ?', [id])
+    return rows[0]
+  },
+  createDirectInvite: async (
+    id: string, groupId: string, invitedUserId: string, role: string, createdBy: string
+  ): Promise<GroupInvite> => {
+    await pool.execute<ResultSetHeader>(
+      'INSERT INTO group_invites (id, group_id, invited_user_id, role, created_by) VALUES (?, ?, ?, ?, ?)',
+      [id, groupId, invitedUserId, role, createdBy]
+    )
+    const [rows] = await pool.execute<GroupInvite[]>('SELECT * FROM group_invites WHERE id = ?', [id])
+    return rows[0]
+  },
+  getByCode: async (code: string): Promise<GroupInvite | null> => {
+    const [rows] = await pool.execute<GroupInvite[]>(
+      'SELECT * FROM group_invites WHERE invite_code = ? AND used_at IS NULL',
+      [code]
+    )
+    return rows[0] ?? null
+  },
+  getDirectInvite: async (groupId: string, userId: string): Promise<GroupInvite | null> => {
+    const [rows] = await pool.execute<GroupInvite[]>(
+      'SELECT * FROM group_invites WHERE group_id = ? AND invited_user_id = ? AND used_at IS NULL',
+      [groupId, userId]
+    )
+    return rows[0] ?? null
+  },
+  markUsed: async (id: string): Promise<void> => {
+    await pool.execute('UPDATE group_invites SET used_at = NOW() WHERE id = ?', [id])
+  },
+  listPending: async (groupId: string): Promise<GroupInvite[]> => {
+    const [rows] = await pool.execute<GroupInvite[]>(
+      'SELECT * FROM group_invites WHERE group_id = ? AND used_at IS NULL ORDER BY created_at DESC',
+      [groupId]
+    )
+    return rows
+  },
+  listForUser: async (userId: string): Promise<(GroupInvite & { group_name: string })[]> => {
+    const [rows] = await pool.execute<(GroupInvite & { group_name: string } & RowDataPacket)[]>(
+      `SELECT gi.*, g.name AS group_name FROM group_invites gi
+       INNER JOIN \`groups\` g ON gi.group_id = g.id
+       WHERE gi.invited_user_id = ? AND gi.used_at IS NULL ORDER BY gi.created_at DESC`,
+      [userId]
+    )
+    return rows
+  },
+  remove: async (id: string): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>('DELETE FROM group_invites WHERE id = ?', [id])
+    return result.affectedRows > 0
+  },
 }

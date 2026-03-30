@@ -6,6 +6,7 @@ import image_bed from './image_bed.js';
 import file_drive from './file_drive.js';
 import bookmark from './bookmark.js';
 import setting from './setting.js';
+import group from './group.js';
 import { timelineData } from '../utils/sqlData.js';
 const appRouter = router({
     hello: publicPro.input(z.string()).query(({ input }) => {
@@ -15,7 +16,7 @@ const appRouter = router({
         return `Hello, ${input}!`
     }),
     timeline: needAuth.input(z.number().int().min(0)).query(async ({ input, ctx }) => {
-        return await timelineData.getTimeline(ctx.user_id, input)
+        return await timelineData.getTimeline(ctx.user_id!, ctx.group_id, input)
     }),
     auth,
     notepad,
@@ -23,6 +24,7 @@ const appRouter = router({
     file_drive,
     bookmark,
     setting,
+    group,
 })
 export default appRouter;
 export type AppRouter = typeof appRouter;

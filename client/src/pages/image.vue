@@ -252,6 +252,9 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import ImageCard from '../components/compose/ImageCard.vue'
 import { server } from '../server'
+import { useMainStore } from '../store/mainStore'
+
+const mainStore = useMainStore()
 
 type SortKey = 'time_desc' | 'time' | 'name'
 
@@ -504,6 +507,11 @@ const handleScroll = () => {
     }
   }, 200)
 }
+
+watch(() => mainStore.refreshTrigger, () => {
+  loadTags()
+  getList()
+})
 
 onMounted(() => {
   document.addEventListener('paste', pasteHandler)

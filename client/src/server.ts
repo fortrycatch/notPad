@@ -13,9 +13,9 @@ const server = createTRPCProxyClient<AppRouter>({
       url: serverURL,
       headers: () => {
         const mainStore = useMainStore();
-        return {
-          token: mainStore.token
-        };
+        const h: Record<string, string> = { token: mainStore.token };
+        if (mainStore.activeGroupId) h['x-group-id'] = mainStore.activeGroupId;
+        return h;
       }
     }),
   ],

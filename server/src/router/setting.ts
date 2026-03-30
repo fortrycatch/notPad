@@ -18,9 +18,9 @@ export default router({
             return { success: await settingData.remove(ctx.user_id!, input.key) }
         }),
     getUsageStats: needAuth.query(async ({ ctx }) => {
-        return await usageStatsData.get(ctx.user_id!)
+        return await usageStatsData.get(ctx.user_id!, ctx.group_id)
     }),
     recalculateStats: needAuth.mutation(async ({ ctx }) => {
-        return await usageStatsData.recalculate(ctx.user_id!)
+        return await usageStatsData.recalculate(ctx.user_id!, ctx.group_id)
     }),
 })

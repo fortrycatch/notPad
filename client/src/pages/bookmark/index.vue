@@ -763,6 +763,11 @@ watch(
   }
 )
 
+watch(() => mainStore.refreshTrigger, () => {
+  loadTags()
+  fetchList()
+})
+
 onMounted(() => {
   loadTags()
   fetchList()

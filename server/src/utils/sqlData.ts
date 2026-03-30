@@ -1,3 +1,7 @@
+/**
+ * 需要拆分，重构
+ */
+
 import { pool } from '../database.js'
 import type { RowDataPacket, ResultSetHeader } from 'mysql2'
 import crypto from 'node:crypto'
@@ -7,6 +11,57 @@ function parseMeta(raw: unknown): Record<string, unknown> {
   if (typeof raw === 'string') return JSON.parse(raw)
   if (typeof raw === 'object') return raw as Record<string, unknown>
   return {}
+}
+
+export interface TodoRef {
+  type: 'note' | 'image' | 'file' | 'bookmark'
+  refId: string
+  title: string
+  url?: string
+  mimeType?: string
+  bookmarkType?: 'url' | 'image' | 'note' | 'file'
+  targetRefId?: string
+}
+
+function parseTodoRefs(raw: unknown): TodoRef[] {
+  if (!raw) return []
+  const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map((item) => {
+      const rawType = item.type
+      const type =
+        rawType === 'image' || rawType === 'file' || rawType === 'bookmark'
+          ? rawType
+          : 'note'
+      const ref: TodoRef = {
+        type,
+        refId: String(item.refId ?? ''),
+        title: String(item.title ?? ''),
+      }
+      if ((type === 'image' || type === 'bookmark') && typeof item.url === 'string' && item.url) {
+        ref.url = item.url
+      }
+      if (type === 'file' && typeof item.mimeType === 'string' && item.mimeType) {
+        ref.mimeType = item.mimeType
+      }
+      if (type === 'bookmark') {
+        if (
+          item.bookmarkType === 'url'
+          || item.bookmarkType === 'image'
+          || item.bookmarkType === 'note'
+          || item.bookmarkType === 'file'
+        ) {
+          ref.bookmarkType = item.bookmarkType
+        }
+        if (typeof item.targetRefId === 'string' && item.targetRefId) {
+          ref.targetRefId = item.targetRefId
+        }
+      }
+      return ref
+    })
+    .filter(ref => ref.refId && ref.title)
 }
 
 export function ownerWhere(userId: string, groupId: string | null): { sql: string; params: string[] } {
@@ -1074,6 +1129,7 @@ export const groupData = {
     return result.affectedRows > 0
   },
   remove: async (id: string): Promise<boolean> => {
+    await pool.execute('DELETE FROM todo_lists WHERE group_id = ?', [id])
     await pool.execute('DELETE FROM group_chat_messages WHERE group_id = ?', [id])
     await pool.execute('DELETE FROM group_members WHERE group_id = ?', [id])
     await pool.execute('DELETE FROM group_invites WHERE group_id = ?', [id])
@@ -1268,6 +1324,128 @@ export const groupInviteData = {
   },
   remove: async (id: string): Promise<boolean> => {
     const [result] = await pool.execute<ResultSetHeader>('DELETE FROM group_invites WHERE id = ?', [id])
+    return result.affectedRows > 0
+  },
+}
+
+// ─── Todo helpers ───
+
+export interface TodoList extends RowDataPacket {
+  id: string
+  name: string
+  color: string
+  user_id: string
+  group_id: string | null
+  sort_order: number
+  created_at: Date
+  updated_at: Date
+}
+
+export interface TodoItem extends RowDataPacket {
+  id: string
+  list_id: string
+  title: string
+  description: string
+  done: number
+  color: string | null
+  refs: unknown
+  sort_order: number
+  created_at: Date
+  updated_at: Date
+}
+
+export const todoListData = {
+  list: async (userId: string, groupId: string | null): Promise<TodoList[]> => {
+    const ow = ownerWhere(userId, groupId)
+    const [rows] = await pool.execute<TodoList[]>(
+      `SELECT * FROM todo_lists WHERE ${ow.sql} ORDER BY sort_order, created_at`,
+      ow.params
+    )
+    return rows
+  },
+  getById: async (id: string, userId: string, groupId: string | null): Promise<TodoList | null> => {
+    const ow = ownerWhere(userId, groupId)
+    const [rows] = await pool.execute<TodoList[]>(
+      `SELECT * FROM todo_lists WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
+    )
+    return rows[0] ?? null
+  },
+  create: async (name: string, color: string, userId: string, groupId: string | null): Promise<TodoList> => {
+    const id = crypto.randomUUID()
+    await pool.execute<ResultSetHeader>(
+      'INSERT INTO todo_lists (id, name, color, user_id, group_id) VALUES (?, ?, ?, ?, ?)',
+      [id, name, color, userId, groupId]
+    )
+    const [rows] = await pool.execute<TodoList[]>('SELECT * FROM todo_lists WHERE id = ?', [id])
+    return rows[0]
+  },
+  update: async (id: string, fields: { name?: string; color?: string; sort_order?: number }, userId: string, groupId: string | null): Promise<boolean> => {
+    const ow = ownerWhere(userId, groupId)
+    const sets: string[] = []
+    const params: (string | number)[] = []
+    if (fields.name !== undefined) { sets.push('name = ?'); params.push(fields.name) }
+    if (fields.color !== undefined) { sets.push('color = ?'); params.push(fields.color) }
+    if (fields.sort_order !== undefined) { sets.push('sort_order = ?'); params.push(fields.sort_order) }
+    if (sets.length === 0) return false
+    params.push(id, ...ow.params)
+    const [result] = await pool.execute<ResultSetHeader>(
+      `UPDATE todo_lists SET ${sets.join(', ')} WHERE id = ? AND ${ow.sql}`,
+      params
+    )
+    return result.affectedRows > 0
+  },
+  remove: async (id: string, userId: string, groupId: string | null): Promise<boolean> => {
+    const ow = ownerWhere(userId, groupId)
+    const [result] = await pool.execute<ResultSetHeader>(
+      `DELETE FROM todo_lists WHERE id = ? AND ${ow.sql}`,
+      [id, ...ow.params]
+    )
+    return result.affectedRows > 0
+  },
+}
+
+export const todoItemData = {
+  listByListId: async (listId: string): Promise<(Omit<TodoItem, 'refs'> & { refs: TodoRef[] })[]> => {
+    const [items] = await pool.execute<TodoItem[]>(
+      'SELECT * FROM todo_items WHERE list_id = ? ORDER BY sort_order, created_at',
+      [listId]
+    )
+    return items.map(({ refs, ...item }) => ({ ...item, refs: parseTodoRefs(refs) }))
+  },
+  getById: async (id: string): Promise<(Omit<TodoItem, 'refs'> & { refs: TodoRef[] }) | null> => {
+    const [rows] = await pool.execute<TodoItem[]>('SELECT * FROM todo_items WHERE id = ?', [id])
+    if (!rows[0]) return null
+    const { refs, ...item } = rows[0]
+    return { ...item, refs: parseTodoRefs(refs) }
+  },
+  create: async (listId: string, title: string, description: string, color: string | null, refs: TodoRef[]): Promise<Omit<TodoItem, 'refs'> & { refs: TodoRef[] }> => {
+    const id = crypto.randomUUID()
+    await pool.execute<ResultSetHeader>(
+      'INSERT INTO todo_items (id, list_id, title, description, color, refs) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, listId, title, description, color, JSON.stringify(refs)]
+    )
+    return await todoItemData.getById(id) as Omit<TodoItem, 'refs'> & { refs: TodoRef[] }
+  },
+  update: async (id: string, fields: { title?: string; description?: string; done?: number; color?: string | null; refs?: TodoRef[]; sort_order?: number }): Promise<boolean> => {
+    const sets: string[] = []
+    const params: (string | number | null)[] = []
+    if (fields.title !== undefined) { sets.push('title = ?'); params.push(fields.title) }
+    if (fields.description !== undefined) { sets.push('description = ?'); params.push(fields.description) }
+    if (fields.done !== undefined) { sets.push('done = ?'); params.push(fields.done) }
+    if (fields.color !== undefined) { sets.push('color = ?'); params.push(fields.color) }
+    if (fields.refs !== undefined) { sets.push('refs = ?'); params.push(JSON.stringify(fields.refs)) }
+    if (fields.sort_order !== undefined) { sets.push('sort_order = ?'); params.push(fields.sort_order) }
+    if (sets.length === 0) return false
+    params.push(id)
+    const [result] = await pool.execute<ResultSetHeader>(
+      `UPDATE todo_items SET ${sets.join(', ')} WHERE id = ?`,
+      params
+    )
+    return result.affectedRows > 0
+  },
+  remove: async (id: string): Promise<boolean> => {
+    const [result] = await pool.execute<ResultSetHeader>('DELETE FROM todo_items WHERE id = ?', [id])
     return result.affectedRows > 0
   },
 }

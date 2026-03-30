@@ -257,6 +257,38 @@ export async function initDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS todo_lists (
+        id VARCHAR(36) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        color VARCHAR(32) NOT NULL DEFAULT '#9e9e9e',
+        user_id VARCHAR(36) NOT NULL,
+        group_id VARCHAR(36) NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_group_id (group_id)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS todo_items (
+        id VARCHAR(36) PRIMARY KEY,
+        list_id VARCHAR(36) NOT NULL,
+        title VARCHAR(512) NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        done TINYINT NOT NULL DEFAULT 0,
+        color VARCHAR(32) NULL,
+        refs JSON NOT NULL,
+        sort_order INT NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_list_id (list_id),
+        CONSTRAINT fk_todo_items_list FOREIGN KEY (list_id) REFERENCES todo_lists(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     for (const sql of [
       'ALTER TABLE tokens ADD COLUMN user_agent VARCHAR(512) NULL DEFAULT NULL',
       'ALTER TABLE tokens ADD COLUMN alias VARCHAR(128) NULL DEFAULT NULL',

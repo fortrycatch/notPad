@@ -107,6 +107,7 @@ watch(() => mainStore.authenticated, (val) => {
 				<v-list-item nav link title="图床" prepend-icon="mdi-image" to="/image" />
 				<v-list-item nav link title="网盘" prepend-icon="mdi-folder-multiple" to="/file" />
 				<v-list-item nav link title="书签" prepend-icon="mdi-bookmark-multiple" to="/bookmark" />
+				<v-list-item nav link title="待办" prepend-icon="mdi-checkbox-marked-circle-outline" to="/todo" />
 				<v-list-item
 					v-if="mainStore.isGroupContext"
 					nav

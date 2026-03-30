@@ -69,6 +69,10 @@ export function ownerWhere(userId: string, groupId: string | null): { sql: strin
   return { sql: 'user_id = ? AND group_id IS NULL', params: [userId] }
 }
 
+function ownerScopeKey(userId: string, groupId: string | null): string {
+  return groupId ? `group:${groupId}` : `user:${userId}`
+}
+
 export interface Note extends RowDataPacket {
   id: string
   title: string
@@ -442,15 +446,32 @@ export const imageTagData = {
     return rows
   },
   create: async (name: string, userId: string, groupId: string | null = null): Promise<ImageTag> => {
-    const [result] = await pool.execute<ResultSetHeader>(
-      'INSERT INTO image_tags (name, user_id, group_id) VALUES (?, ?, ?)',
-      [name, userId, groupId]
+    const scopeKey = ownerScopeKey(userId, groupId)
+    const [existingRows] = await pool.execute<ImageTag[]>(
+      'SELECT * FROM image_tags WHERE scope_key = ? AND name = ? LIMIT 1',
+      [scopeKey, name]
     )
-    const [rows] = await pool.execute<ImageTag[]>(
-      'SELECT * FROM image_tags WHERE id = ?',
-      [result.insertId]
-    )
-    return rows[0]
+    if (existingRows[0]) return existingRows[0]
+    try {
+      const [result] = await pool.execute<ResultSetHeader>(
+        'INSERT INTO image_tags (name, user_id, group_id, scope_key) VALUES (?, ?, ?, ?)',
+        [name, userId, groupId, scopeKey]
+      )
+      const [rows] = await pool.execute<ImageTag[]>(
+        'SELECT * FROM image_tags WHERE id = ?',
+        [result.insertId]
+      )
+      return rows[0]
+    } catch (e: unknown) {
+      const err = e as { code?: string }
+      if (err.code !== 'ER_DUP_ENTRY') throw e
+      const [rows] = await pool.execute<ImageTag[]>(
+        'SELECT * FROM image_tags WHERE scope_key = ? AND name = ? LIMIT 1',
+        [scopeKey, name]
+      )
+      if (rows[0]) return rows[0]
+      throw e
+    }
   },
   remove: async (id: number, userId: string, groupId: string | null = null): Promise<boolean> => {
     await pool.execute('DELETE FROM image_tag_map WHERE tag_id = ?', [id])
@@ -507,15 +528,32 @@ export const noteTagData = {
     return rows
   },
   create: async (name: string, userId: string, groupId: string | null = null): Promise<NoteTag> => {
-    const [result] = await pool.execute<ResultSetHeader>(
-      'INSERT INTO note_tags (name, user_id, group_id) VALUES (?, ?, ?)',
-      [name, userId, groupId]
+    const scopeKey = ownerScopeKey(userId, groupId)
+    const [existingRows] = await pool.execute<NoteTag[]>(
+      'SELECT * FROM note_tags WHERE scope_key = ? AND name = ? LIMIT 1',
+      [scopeKey, name]
     )
-    const [rows] = await pool.execute<NoteTag[]>(
-      'SELECT * FROM note_tags WHERE id = ?',
-      [result.insertId]
-    )
-    return rows[0]
+    if (existingRows[0]) return existingRows[0]
+    try {
+      const [result] = await pool.execute<ResultSetHeader>(
+        'INSERT INTO note_tags (name, user_id, group_id, scope_key) VALUES (?, ?, ?, ?)',
+        [name, userId, groupId, scopeKey]
+      )
+      const [rows] = await pool.execute<NoteTag[]>(
+        'SELECT * FROM note_tags WHERE id = ?',
+        [result.insertId]
+      )
+      return rows[0]
+    } catch (e: unknown) {
+      const err = e as { code?: string }
+      if (err.code !== 'ER_DUP_ENTRY') throw e
+      const [rows] = await pool.execute<NoteTag[]>(
+        'SELECT * FROM note_tags WHERE scope_key = ? AND name = ? LIMIT 1',
+        [scopeKey, name]
+      )
+      if (rows[0]) return rows[0]
+      throw e
+    }
   },
   remove: async (id: number, userId: string, groupId: string | null = null): Promise<boolean> => {
     await pool.execute('DELETE FROM note_tag_map WHERE tag_id = ?', [id])
@@ -871,15 +909,32 @@ export const bookmarkTagData = {
     return rows
   },
   create: async (name: string, userId: string, groupId: string | null = null): Promise<BookmarkTag> => {
-    const [result] = await pool.execute<ResultSetHeader>(
-      'INSERT INTO bookmark_tags (name, user_id, group_id) VALUES (?, ?, ?)',
-      [name, userId, groupId]
+    const scopeKey = ownerScopeKey(userId, groupId)
+    const [existingRows] = await pool.execute<BookmarkTag[]>(
+      'SELECT * FROM bookmark_tags WHERE scope_key = ? AND name = ? LIMIT 1',
+      [scopeKey, name]
     )
-    const [rows] = await pool.execute<BookmarkTag[]>(
-      'SELECT * FROM bookmark_tags WHERE id = ?',
-      [result.insertId]
-    )
-    return rows[0]
+    if (existingRows[0]) return existingRows[0]
+    try {
+      const [result] = await pool.execute<ResultSetHeader>(
+        'INSERT INTO bookmark_tags (name, user_id, group_id, scope_key) VALUES (?, ?, ?, ?)',
+        [name, userId, groupId, scopeKey]
+      )
+      const [rows] = await pool.execute<BookmarkTag[]>(
+        'SELECT * FROM bookmark_tags WHERE id = ?',
+        [result.insertId]
+      )
+      return rows[0]
+    } catch (e: unknown) {
+      const err = e as { code?: string }
+      if (err.code !== 'ER_DUP_ENTRY') throw e
+      const [rows] = await pool.execute<BookmarkTag[]>(
+        'SELECT * FROM bookmark_tags WHERE scope_key = ? AND name = ? LIMIT 1',
+        [scopeKey, name]
+      )
+      if (rows[0]) return rows[0]
+      throw e
+    }
   },
   remove: async (id: number, userId: string, groupId: string | null = null): Promise<boolean> => {
     await pool.execute('DELETE FROM bookmark_tag_map WHERE tag_id = ?', [id])

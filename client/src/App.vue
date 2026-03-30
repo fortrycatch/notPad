@@ -5,6 +5,7 @@ import routes from "~pages";
 import { computed, onMounted, watch } from "vue";
 import { useMainStore } from "./store/mainStore";
 import { useTheme } from "vuetify";
+import { deriveThemeColors } from "./utils/themeColors";
 console.log(routes);
 import { server } from "./server";
 const mainStore = useMainStore();
@@ -18,10 +19,11 @@ watch(darkMode, (value) => {
 	theme.global.name.value = value ? "dark" : "light";
 }, { immediate: true });
 
+const DEFAULT_PRIMARY = '#ff9edd';
 const applyPrimaryColor = (color: string) => {
-	if (!color) return;
-	theme.themes.value.light.colors.primary = color;
-	theme.themes.value.dark.colors.primary = color;
+	const derived = deriveThemeColors(color || DEFAULT_PRIMARY);
+	Object.assign(theme.themes.value.light.colors, derived.light);
+	Object.assign(theme.themes.value.dark.colors, derived.dark);
 };
 
 watch(() => mainStore.primaryColor, applyPrimaryColor, { immediate: true });
@@ -29,9 +31,21 @@ watch(() => mainStore.primaryColor, applyPrimaryColor, { immediate: true });
 async function loadGroups() {
 	try {
 		const groups = await server.group.list.query();
-		mainStore.setGroups(groups.map(g => ({ id: g.id, name: g.name, role: g.role })));
+		mainStore.setGroups(groups.map(g => ({
+			id: g.id, name: g.name, role: g.role,
+			avatar: (g as any).meta?.avatar,
+			primaryColor: (g as any).meta?.primaryColor,
+		})));
 		mainStore.restoreActiveGroup();
 	} catch { /* noop on fail */ }
+}
+
+async function loadUserProfile() {
+	try {
+		const p = await server.auth.getProfile.query();
+		mainStore.userAvatar = (p.meta?.avatar as string) || '';
+		mainStore.setUserPrimaryColor((p.meta?.primaryColor as string) || '');
+	} catch { /* noop */ }
 }
 
 onMounted(async () => {
@@ -41,8 +55,7 @@ onMounted(async () => {
 			mainStore.authenticated = false;
 		} else {
 			mainStore.authenticated = true;
-			mainStore.applySettings(result.settings);
-			await loadGroups();
+			await Promise.all([loadGroups(), loadUserProfile()]);
 		}
 	} catch {
 		mainStore.authenticated = false;
@@ -52,7 +65,7 @@ onMounted(async () => {
 });
 
 watch(() => mainStore.authenticated, (val) => {
-	if (val) loadGroups();
+	if (val) { loadGroups(); loadUserProfile(); }
 });
 </script>
 
@@ -96,7 +109,7 @@ watch(() => mainStore.authenticated, (val) => {
 				<v-list-item nav link title="书签" prepend-icon="mdi-bookmark-multiple" to="/bookmark" />
 				<v-list-item nav link title="群组" prepend-icon="mdi-account-group" to="/group" />
 				<v-list-item nav link title="账户" prepend-icon="mdi-information" to="/account" />
-				<v-list-item v-if="!mainStore.isGroupContext" nav link title="设置" prepend-icon="mdi-cog" to="/setting" />
+				<v-list-item nav link title="设置" prepend-icon="mdi-cog" to="/setting" />
 			</v-list>
 		</template>
 	</Normal>

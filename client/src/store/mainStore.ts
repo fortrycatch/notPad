@@ -1,19 +1,13 @@
 import { defineStore } from "pinia";
 
-const SETTINGS_CACHE_KEY = "userSettings";
-
-function loadCachedSettings(): Record<string, string> {
-    try {
-        return JSON.parse(localStorage.getItem(SETTINGS_CACHE_KEY) || "{}");
-    } catch {
-        return {};
-    }
-}
+const PRIMARY_CACHE_KEY = "cachedPrimaryColor";
 
 export interface GroupInfo {
     id: string;
     name: string;
     role: string;
+    avatar?: string;
+    primaryColor?: string;
 }
 
 export const useMainStore = defineStore("main", {
@@ -23,12 +17,19 @@ export const useMainStore = defineStore("main", {
         token: localStorage.getItem("token") || "",
         darkMode: localStorage.getItem("darkMode") !== "false",
         refreshTrigger: 0,
-        settings: loadCachedSettings(),
         activeGroupId: null as string | null,
         groups: [] as GroupInfo[],
+        userAvatar: '' as string,
+        userPrimaryColor: '' as string,
     }),
     getters: {
-        primaryColor: (state) => state.settings.primaryColor || "",
+        primaryColor(state): string {
+            if (state.activeGroupId) {
+                const g = state.groups.find(g => g.id === state.activeGroupId);
+                if (g?.primaryColor) return g.primaryColor;
+            }
+            return state.userPrimaryColor;
+        },
         activeGroup: (state) => state.groups.find(g => g.id === state.activeGroupId) ?? null,
         isGroupContext: (state) => state.activeGroupId !== null,
     },
@@ -43,9 +44,9 @@ export const useMainStore = defineStore("main", {
         toggleDarkMode() {
             this.setDarkMode(!this.darkMode);
         },
-        applySettings(settings: Record<string, string>) {
-            this.settings = settings;
-            localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(settings));
+        setUserPrimaryColor(color: string) {
+            this.userPrimaryColor = color;
+            localStorage.setItem(PRIMARY_CACHE_KEY, color);
         },
         switchGroup(groupId: string | null) {
             this.activeGroupId = groupId;

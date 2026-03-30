@@ -31,7 +31,8 @@ export default router({
     const membership = await groupMemberData.getMembership(input, ctx.user_id!)
     if (!membership) throw new TRPCError({ code: 'FORBIDDEN', message: '非群组成员' })
     const group = await groupData.getById(input)
-    return { ...group, role: membership.role }
+    const meta = await groupData.getMeta(input)
+    return { ...group, role: membership.role, meta }
   }),
 
   update: needAuth.input(z.object({
@@ -43,6 +44,17 @@ export default router({
     assertRole(membership?.role ?? null, 'admin')
     await groupData.update(input.groupId, input.name, input.description)
     return await groupData.getById(input.groupId)
+  }),
+
+  updateMeta: needAuth.input(z.object({
+    groupId: z.string(),
+    meta: z.record(z.string(), z.unknown()),
+  })).mutation(async ({ ctx, input }) => {
+    const membership = await groupMemberData.getMembership(input.groupId, ctx.user_id!)
+    assertRole(membership?.role ?? null, 'admin')
+    const existing = await groupData.getMeta(input.groupId)
+    await groupData.updateMeta(input.groupId, { ...existing, ...input.meta })
+    return await groupData.getMeta(input.groupId)
   }),
 
   delete: needAuth.input(z.string()).mutation(async ({ ctx, input }) => {
@@ -133,11 +145,21 @@ export default router({
     return await groupInviteData.listPending(input)
   }),
 
+  listInviteCodes: needAuth.input(z.string()).query(async ({ ctx, input }) => {
+    const membership = await groupMemberData.getMembership(input, ctx.user_id!)
+    assertRole(membership?.role ?? null, 'admin')
+    return await groupInviteData.listLinkInvites(input)
+  }),
+
   myInvites: needAuth.query(async ({ ctx }) => {
     return await groupInviteData.listForUser(ctx.user_id!)
   }),
 
   removeInvite: needAuth.input(z.string()).mutation(async ({ ctx, input }) => {
+    const invite = await groupInviteData.getById(input)
+    if (!invite) throw new TRPCError({ code: 'NOT_FOUND', message: '邀请不存在' })
+    const membership = await groupMemberData.getMembership(invite.group_id, ctx.user_id!)
+    assertRole(membership?.role ?? null, 'admin')
     return await groupInviteData.remove(input)
   }),
 

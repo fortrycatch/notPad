@@ -2,6 +2,13 @@ import { pool } from '../database.js'
 import type { RowDataPacket, ResultSetHeader } from 'mysql2'
 import crypto from 'node:crypto'
 
+function parseMeta(raw: unknown): Record<string, unknown> {
+  if (!raw) return {}
+  if (typeof raw === 'string') return JSON.parse(raw)
+  if (typeof raw === 'object') return raw as Record<string, unknown>
+  return {}
+}
+
 export function ownerWhere(userId: string, groupId: string | null): { sql: string; params: string[] } {
   if (groupId) return { sql: 'group_id = ?', params: [groupId] }
   return { sql: 'user_id = ? AND group_id IS NULL', params: [userId] }
@@ -208,7 +215,16 @@ export const userData = {
       console.error('更新用户失败:', error)
       throw error
     }
-  }
+  },
+  getMeta: async (id: string): Promise<Record<string, unknown>> => {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT meta FROM users WHERE id = ?', [id]
+    )
+    return parseMeta(rows[0]?.meta)
+  },
+  updateMeta: async (id: string, meta: Record<string, unknown>): Promise<void> => {
+    await pool.execute('UPDATE users SET meta = ? WHERE id = ?', [JSON.stringify(meta), id])
+  },
 }
 export interface Token extends RowDataPacket {
   user_id: string
@@ -1043,12 +1059,12 @@ export const groupData = {
     const [rows] = await pool.execute<Group[]>('SELECT * FROM `groups` WHERE id = ?', [id])
     return rows[0] ?? null
   },
-  listByUser: async (userId: string): Promise<(Group & { role: string })[]> => {
+  listByUser: async (userId: string): Promise<(Group & { role: string; meta: Record<string, unknown> })[]> => {
     const [rows] = await pool.execute<(Group & { role: string } & RowDataPacket)[]>(
       'SELECT g.*, gm.role FROM `groups` g INNER JOIN group_members gm ON g.id = gm.group_id WHERE gm.user_id = ? ORDER BY g.updated_at DESC',
       [userId]
     )
-    return rows
+    return rows.map(r => ({ ...r, meta: parseMeta(r.meta) }))
   },
   update: async (id: string, name: string, description: string): Promise<boolean> => {
     const [result] = await pool.execute<ResultSetHeader>(
@@ -1062,6 +1078,15 @@ export const groupData = {
     await pool.execute('DELETE FROM group_invites WHERE group_id = ?', [id])
     const [result] = await pool.execute<ResultSetHeader>('DELETE FROM `groups` WHERE id = ?', [id])
     return result.affectedRows > 0
+  },
+  getMeta: async (id: string): Promise<Record<string, unknown>> => {
+    const [rows] = await pool.execute<RowDataPacket[]>(
+      'SELECT meta FROM `groups` WHERE id = ?', [id]
+    )
+    return parseMeta(rows[0]?.meta)
+  },
+  updateMeta: async (id: string, meta: Record<string, unknown>): Promise<void> => {
+    await pool.execute('UPDATE `groups` SET meta = ? WHERE id = ?', [JSON.stringify(meta), id])
   },
 }
 
@@ -1088,12 +1113,12 @@ export const groupMemberData = {
   },
   listMembers: async (groupId: string): Promise<GroupMember[]> => {
     const [rows] = await pool.execute<GroupMember[]>(
-      `SELECT gm.*, u.name AS user_name, u.email AS user_email
+      `SELECT gm.*, u.name AS user_name, u.email AS user_email, u.meta AS user_meta
        FROM group_members gm INNER JOIN users u ON gm.user_id = u.id
        WHERE gm.group_id = ? ORDER BY FIELD(gm.role,'owner','admin','editor','viewer'), gm.joined_at`,
       [groupId]
     )
-    return rows
+    return rows.map(r => ({ ...r, user_meta: parseMeta((r as any).user_meta) }))
   },
   updateRole: async (groupId: string, userId: string, role: string): Promise<boolean> => {
     const [result] = await pool.execute<ResultSetHeader>(
@@ -1157,6 +1182,17 @@ export const groupInviteData = {
       [userId]
     )
     return rows
+  },
+  listLinkInvites: async (groupId: string): Promise<GroupInvite[]> => {
+    const [rows] = await pool.execute<GroupInvite[]>(
+      'SELECT * FROM group_invites WHERE group_id = ? AND invite_code IS NOT NULL ORDER BY created_at DESC',
+      [groupId]
+    )
+    return rows
+  },
+  getById: async (id: string): Promise<GroupInvite | null> => {
+    const [rows] = await pool.execute<GroupInvite[]>('SELECT * FROM group_invites WHERE id = ?', [id])
+    return rows[0] ?? null
   },
   remove: async (id: string): Promise<boolean> => {
     const [result] = await pool.execute<ResultSetHeader>('DELETE FROM group_invites WHERE id = ?', [id])

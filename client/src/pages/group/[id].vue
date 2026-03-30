@@ -24,6 +24,13 @@
             </v-card-item>
             <v-divider />
             <v-card-text>
+              <div class="d-flex flex-column align-center mb-4">
+                <v-avatar size="80" :color="groupAvatar ? undefined : 'primary'" variant="tonal" class="cursor-pointer" @click="canEdit && (avatarPicker = true)">
+                  <v-img v-if="groupAvatar" :src="groupAvatar + '?x-oss-process=image/resize,w_200'" />
+                  <v-icon v-else size="36">mdi-account-group</v-icon>
+                </v-avatar>
+                <v-btn v-if="canEdit" variant="text" size="small" class="mt-1" @click="avatarPicker = true">更换头像</v-btn>
+              </div>
               <v-text-field
                 v-model="editName"
                 label="名称"
@@ -45,6 +52,14 @@
               </div>
             </v-card-text>
           </v-card>
+
+          <UsageStatsCard
+            v-if="mainStore.activeGroupId === groupId"
+            variant="group"
+            class="mt-4"
+            @reloaded="msg('已重新统计')"
+            @error="(m) => msg(m, 'error')"
+          />
 
           <v-card v-if="isAdmin" variant="elevated" elevation="1" class="mt-4">
             <v-card-item>
@@ -80,6 +95,51 @@
             </v-card-text>
           </v-card>
 
+          <v-card v-if="isAdmin" variant="elevated" elevation="1" class="mt-4">
+            <v-card-item>
+              <v-card-title>邀请码管理</v-card-title>
+              <template #append>
+                <v-btn icon="mdi-refresh" variant="text" size="small" @click="loadInviteCodes" />
+              </template>
+            </v-card-item>
+            <v-divider />
+            <v-card-text v-if="codesLoading" class="d-flex justify-center py-6">
+              <v-progress-circular indeterminate color="primary" size="24" />
+            </v-card-text>
+            <v-list v-else-if="inviteCodes.length > 0" density="compact" class="py-0" bg-color="transparent">
+              <template v-for="(c, i) in inviteCodes" :key="c.id">
+                <v-divider v-if="i > 0" />
+                <v-list-item>
+                  <v-list-item-title class="text-body-2 font-weight-medium" style="font-family: monospace">
+                    {{ c.invite_code }}
+                  </v-list-item-title>
+                  <v-list-item-subtitle class="d-flex align-center ga-1 flex-wrap">
+                    <v-chip :color="codeStatusColor(c)" size="x-small" variant="tonal" label>
+                      {{ codeStatusLabel(c) }}
+                    </v-chip>
+                    <v-chip size="x-small" variant="outlined" label>{{ roleLabel(c.role) }}</v-chip>
+                    <span v-if="c.expires_at" class="text-caption">
+                      {{ new Date(c.expires_at).toLocaleString() }}
+                    </span>
+                  </v-list-item-subtitle>
+                  <template #append>
+                    <v-btn
+                      v-if="!c.used_at"
+                      icon="mdi-delete-outline"
+                      variant="text"
+                      size="small"
+                      color="error"
+                      @click="revokeCode(c.id)"
+                    />
+                  </template>
+                </v-list-item>
+              </template>
+            </v-list>
+            <v-card-text v-else class="text-center text-medium-emphasis py-6">
+              暂无邀请码
+            </v-card-text>
+          </v-card>
+
           <v-card v-if="isOwner" variant="elevated" elevation="1" class="mt-4">
             <v-card-item>
               <v-card-title class="text-error">危险区域</v-card-title>
@@ -102,8 +162,9 @@
                 <v-divider v-if="i > 0" />
                 <v-list-item>
                   <template #prepend>
-                    <v-avatar :color="roleColor(m.role)" variant="tonal" size="36">
-                      <v-icon size="18">mdi-account</v-icon>
+                    <v-avatar :color="memberAvatar(m) ? undefined : roleColor(m.role)" variant="tonal" size="36">
+                      <v-img v-if="memberAvatar(m)" :src="memberAvatar(m) + '?x-oss-process=image/resize,w_100'" />
+                      <v-icon v-else size="18">mdi-account</v-icon>
                     </v-avatar>
                   </template>
                   <v-list-item-title>{{ m.user_name || m.user_id }}</v-list-item-title>
@@ -164,6 +225,8 @@
     <v-snackbar v-model="snack.show" :color="snack.color" :timeout="3000">
       {{ snack.text }}
     </v-snackbar>
+
+    <ImagePickerDialog v-model="avatarPicker" :current-url="groupAvatar" @select="saveAvatar" />
   </v-container>
 </template>
 
@@ -172,6 +235,8 @@ import { ref, reactive, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { server } from '../../server';
 import { useMainStore } from '../../store/mainStore';
+import ImagePickerDialog from '../../components/compose/ImagePickerDialog.vue';
+import UsageStatsCard from '../../components/compose/UsageStatsCard.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -179,10 +244,10 @@ const mainStore = useMainStore();
 const groupId = route.params.id as string;
 
 type MemberItem = {
-  user_id: string; role: string; user_name?: string; user_email?: string;
+  user_id: string; role: string; user_name?: string; user_email?: string; user_meta?: Record<string, unknown>;
 };
 
-const group = ref<{ id: string; name: string; description: string; role: string } | null>(null);
+const group = ref<{ id: string; name: string; description: string; role: string; meta?: Record<string, unknown> } | null>(null);
 const members = ref<MemberItem[]>([]);
 const loading = ref(true);
 const saving = ref(false);
@@ -195,7 +260,11 @@ const editDesc = ref('');
 const inviteUserId = ref('');
 const inviteRole = ref('editor');
 const inviteLink = ref('');
+const inviteCodes = ref<any[]>([]);
+const codesLoading = ref(false);
 const snack = reactive({ show: false, text: '', color: 'success' });
+const avatarPicker = ref(false);
+const groupAvatar = computed(() => (group.value?.meta?.avatar as string) || '');
 
 const assignableRoles = [
   { title: '管理员', value: 'admin' },
@@ -206,6 +275,11 @@ const assignableRoles = [
 const isOwner = computed(() => group.value?.role === 'owner');
 const isAdmin = computed(() => ['owner', 'admin'].includes(group.value?.role ?? ''));
 const canEdit = computed(() => isAdmin.value);
+
+function memberAvatar(m: MemberItem): string {
+  if (!m.user_meta) return '';
+  return (m.user_meta.avatar as string) || '';
+}
 
 function roleColor(role: string) {
   return { owner: 'error', admin: 'warning', editor: 'primary', viewer: 'info' }[role] ?? 'default';
@@ -223,6 +297,18 @@ function switchTo() {
   msg('已切换到该群组空间');
 }
 
+async function saveAvatar(url: string) {
+  try {
+    await server.group.updateMeta.mutate({ groupId, meta: { avatar: url } });
+    if (group.value) group.value.meta = { ...group.value.meta, avatar: url };
+    const groups = await server.group.list.query();
+    mainStore.setGroups(groups.map(g => ({ id: g.id, name: g.name, role: g.role, avatar: (g as any).meta?.avatar, primaryColor: (g as any).meta?.primaryColor })));
+    msg(url ? '头像已更新' : '头像已清除');
+  } catch (e: any) {
+    msg(e.message || '保存失败', 'error');
+  }
+}
+
 async function load() {
   loading.value = true;
   try {
@@ -230,10 +316,11 @@ async function load() {
       server.group.getById.query(groupId),
       server.group.listMembers.query(groupId),
     ]);
-    group.value = g as any;
+    group.value = { ...(g as any) };
     members.value = m as MemberItem[];
     editName.value = g.name ?? '';
     editDesc.value = g.description ?? '';
+    if (['owner', 'admin'].includes((g as any).role)) loadInviteCodes();
   } catch (e: any) {
     msg(e.message || '加载失败', 'error');
   } finally {
@@ -248,7 +335,7 @@ async function saveInfo() {
     msg('已保存');
     group.value = { ...group.value!, name: editName.value, description: editDesc.value };
     const groups = await server.group.list.query();
-    mainStore.setGroups(groups.map(g => ({ id: g.id, name: g.name, role: g.role })));
+    mainStore.setGroups(groups.map(g => ({ id: g.id, name: g.name, role: g.role, avatar: (g as any).meta?.avatar, primaryColor: (g as any).meta?.primaryColor })));
   } catch (e: any) {
     msg(e.message || '保存失败', 'error');
   } finally {
@@ -279,10 +366,42 @@ async function generateLink() {
       groupId, role: inviteRole.value as any, expiresInHours: 72,
     });
     inviteLink.value = inv.invite_code ?? '';
+    await loadInviteCodes();
   } catch (e: any) {
     msg(e.message || '生成失败', 'error');
   } finally {
     generatingLink.value = false;
+  }
+}
+
+function codeStatusColor(c: any): string {
+  if (c.used_at) return 'default';
+  if (c.expires_at && new Date(c.expires_at) < new Date()) return 'warning';
+  return 'success';
+}
+
+function codeStatusLabel(c: any): string {
+  if (c.used_at) return '已使用';
+  if (c.expires_at && new Date(c.expires_at) < new Date()) return '已过期';
+  return '有效';
+}
+
+async function loadInviteCodes() {
+  codesLoading.value = true;
+  try {
+    inviteCodes.value = await server.group.listInviteCodes.query(groupId);
+  } catch { /* noop */ } finally {
+    codesLoading.value = false;
+  }
+}
+
+async function revokeCode(id: string) {
+  try {
+    await server.group.removeInvite.mutate(id);
+    msg('邀请码已撤销');
+    await loadInviteCodes();
+  } catch (e: any) {
+    msg(e.message || '操作失败', 'error');
   }
 }
 

@@ -91,7 +91,7 @@ async function join() {
     joined.value = true;
     info.value = null;
     const groups = await server.group.list.query();
-    mainStore.setGroups(groups.map(g => ({ id: g.id, name: g.name, role: g.role })));
+    mainStore.setGroups(groups.map(g => ({ id: g.id, name: g.name, role: g.role, avatar: (g as any).meta?.avatar, primaryColor: (g as any).meta?.primaryColor })));
   } catch (e: any) {
     error.value = e.message || '加入失败';
     info.value = null;

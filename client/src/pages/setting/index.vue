@@ -5,6 +5,7 @@
         <v-card-title class="text-title-md">
           <v-icon class="mr-2" size="22">mdi-palette</v-icon>
           主题色
+          <v-chip v-if="isGroup" size="small" variant="tonal" color="secondary" class="ml-2">{{ scopeLabel }}</v-chip>
         </v-card-title>
       </v-card-item>
       <v-divider />
@@ -86,7 +87,6 @@ import { server } from '../../server'
 
 const DEFAULT_PRIMARY = '#ff9edd'
 
-/** B 站早年梗色命名，仅作展示用 */
 const presets = [
   { label: '猛男粉', value: '#ff9edd' },
   { label: '胖次蓝', value: '#00a1d6' },
@@ -106,6 +106,9 @@ const customInput = ref('')
 const snackbar = ref(false)
 const snackbarText = ref('')
 
+const isGroup = computed(() => mainStore.isGroupContext)
+const scopeLabel = computed(() => isGroup.value ? `群组「${mainStore.activeGroup?.name}」` : '个人')
+
 const HEX_RE = /^#[0-9a-fA-F]{6}$/
 const validCustom = computed(() => {
   const v = customInput.value.trim()
@@ -123,11 +126,20 @@ const toast = (msg: string) => {
   snackbar.value = true
 }
 
-const saveColor = async (color: string) => {
+async function saveColor(color: string) {
   selectedColor.value = color
-  const newSettings = { ...mainStore.settings, primaryColor: color }
-  mainStore.applySettings(newSettings)
-  await server.setting.set.mutate({ key: 'primaryColor', value: color })
+  if (isGroup.value) {
+    await server.group.updateMeta.mutate({ groupId: mainStore.activeGroupId!, meta: { primaryColor: color } })
+    const groups = await server.group.list.query()
+    mainStore.setGroups(groups.map(g => ({
+      id: g.id, name: g.name, role: g.role,
+      avatar: (g as any).meta?.avatar,
+      primaryColor: (g as any).meta?.primaryColor,
+    })))
+  } else {
+    await server.auth.updateMeta.mutate({ primaryColor: color })
+    mainStore.setUserPrimaryColor(color)
+  }
   toast('主题色已更新')
 }
 
@@ -141,12 +153,20 @@ const applyCustom = () => {
   customInput.value = ''
 }
 
-const resetColor = async () => {
+async function resetColor() {
   selectedColor.value = DEFAULT_PRIMARY
-  const newSettings = { ...mainStore.settings }
-  delete newSettings.primaryColor
-  mainStore.applySettings(newSettings)
-  await server.setting.remove.mutate({ key: 'primaryColor' })
+  if (isGroup.value) {
+    await server.group.updateMeta.mutate({ groupId: mainStore.activeGroupId!, meta: { primaryColor: '' } })
+    const groups = await server.group.list.query()
+    mainStore.setGroups(groups.map(g => ({
+      id: g.id, name: g.name, role: g.role,
+      avatar: (g as any).meta?.avatar,
+      primaryColor: (g as any).meta?.primaryColor,
+    })))
+  } else {
+    await server.auth.updateMeta.mutate({ primaryColor: '' })
+    mainStore.setUserPrimaryColor('')
+  }
   toast('已恢复默认主题色')
 }
 </script>

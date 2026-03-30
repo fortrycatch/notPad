@@ -171,9 +171,6 @@ const login = async () => {
             mainStore.authenticated = true;
             mainStore.token = res.token;
             localStorage.setItem("token", res.token);
-            if ('settings' in res && res.settings) {
-                mainStore.applySettings(res.settings as Record<string, string>);
-            }
             showSnackbar('登录成功', 'success');
             if (reloadIfNotHome()) return;
         } else {
@@ -236,9 +233,6 @@ const register = async () => {
             mainStore.authenticated = true;
             mainStore.token = res.token;
             localStorage.setItem("token", res.token);
-            if ('settings' in res && res.settings) {
-                mainStore.applySettings(res.settings as Record<string, string>);
-            }
             if (reloadIfNotHome()) return;
             const message = 'message' in res ? res.message : '注册成功';
             showSnackbar(message, 'success');

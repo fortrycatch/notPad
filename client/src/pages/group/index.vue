@@ -1,5 +1,15 @@
 <template>
   <v-container class="py-8" fluid>
+    <v-row v-if="mainStore.isGroupContext">
+      <v-col cols="12">
+        <UsageStatsCard
+          variant="group"
+          class="mb-4"
+          @reloaded="msg('已重新统计')"
+          @error="(m) => msg(m, 'error')"
+        />
+      </v-col>
+    </v-row>
     <v-row>
       <v-col cols="12" md="6">
         <v-card variant="elevated" elevation="1">
@@ -18,8 +28,9 @@
               <v-divider v-if="i > 0" />
               <v-list-item :to="`/group/${g.id}`" link>
                 <template #prepend>
-                  <v-avatar color="primary" variant="tonal">
-                    <v-icon>mdi-account-group</v-icon>
+                  <v-avatar :color="g.meta?.avatar ? undefined : 'primary'" variant="tonal">
+                    <v-img v-if="g.meta?.avatar" :src="(g.meta.avatar as string) + '?x-oss-process=image/resize,w_100'" />
+                    <v-icon v-else>mdi-account-group</v-icon>
                   </v-avatar>
                 </template>
                 <v-list-item-title class="font-weight-medium">{{ g.name }}</v-list-item-title>
@@ -153,10 +164,11 @@
 import { ref, reactive, onMounted } from 'vue';
 import { server } from '../../server';
 import { useMainStore } from '../../store/mainStore';
+import UsageStatsCard from '../../components/compose/UsageStatsCard.vue';
 
 const mainStore = useMainStore();
 
-type GroupItem = { id: string; name: string; description: string; role: string };
+type GroupItem = { id: string; name: string; description: string; role: string; meta?: Record<string, unknown> };
 type InviteItem = { id: string; group_name: string; role: string };
 
 const groups = ref<GroupItem[]>([]);
@@ -195,7 +207,7 @@ async function load() {
   try {
     const list = await server.group.list.query();
     groups.value = list as GroupItem[];
-    mainStore.setGroups(list.map(g => ({ id: g.id, name: g.name, role: g.role })));
+    mainStore.setGroups(list.map(g => ({ id: g.id, name: g.name, role: g.role, avatar: (g as any).meta?.avatar, primaryColor: (g as any).meta?.primaryColor })));
   } catch (e: any) {
     msg(e.message || '加载失败', 'error');
   } finally {

@@ -265,6 +265,8 @@ export async function initDatabase() {
       'ALTER TABLE image_tags ADD INDEX idx_group_id (group_id)',
       'ALTER TABLE bookmark_tags ADD COLUMN group_id VARCHAR(36) NULL',
       'ALTER TABLE bookmark_tags ADD INDEX idx_group_id (group_id)',
+      "ALTER TABLE users ADD COLUMN meta JSON NULL",
+      "ALTER TABLE `groups` ADD COLUMN meta JSON NULL",
     ]) {
       try {
         await connection.execute(sql)

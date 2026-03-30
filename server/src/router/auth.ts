@@ -1,6 +1,6 @@
 import { router, publicPro, needAuth } from '../trpc/trpc.js';
 import { z } from 'zod';
-import { userData, tokenData, settingData } from '../utils/sqlData.js';
+import { userData, tokenData } from '../utils/sqlData.js';
 import { getUUID } from '../utils/userCode.js';
 import crypto from 'node:crypto';
 
@@ -54,7 +54,6 @@ export default router({
             }
             
             const token = await tokenData.createToken(user.id, ctx.userAgent);
-            const settings = await settingData.getAll(user.id)
             
             return {
                 success: true,
@@ -64,7 +63,6 @@ export default router({
                     name: user.name,
                     email: user.email
                 },
-                settings,
                 message: '注册成功'
             };
         } catch (error: any) {
@@ -107,7 +105,6 @@ export default router({
             }
             
             const token = await tokenData.createToken(user.id, ctx.userAgent);
-            const settings = await settingData.getAll(user.id)
             
             return {
                 success: true,
@@ -117,7 +114,6 @@ export default router({
                     name: user.name,
                     email: user.email
                 },
-                settings
             };
         } catch (error) {
             console.error('登录失败:', error);
@@ -131,22 +127,28 @@ export default router({
     verifyToken: publicPro.input(z.string()).query(async ({ input }) => {
         try {
             const result = await tokenData.verifyToken(input);
-            if (!result.ok) return { ok: false as const, settings: {} as Record<string, string> }
-            const settings = await settingData.getAll(result.user_id)
-            return { ok: true as const, settings }
+            if (!result.ok) return { ok: false as const }
+            return { ok: true as const }
         } catch (error) {
             console.error('验证token失败:', error);
-            return { ok: false as const, settings: {} as Record<string, string> }
+            return { ok: false as const }
         }
     }),
     getProfile: needAuth.query(async ({ ctx }) => {
         const user = await userData.getUserById(ctx.user_id!);
         if (!user) throw new Error('用户不存在');
+        const meta = await userData.getMeta(ctx.user_id!);
         return {
             id: user.id,
             name: user.name,
-            email: user.email
+            email: user.email,
+            meta,
         };
+    }),
+    updateMeta: needAuth.input(z.record(z.string(), z.unknown())).mutation(async ({ ctx, input }) => {
+        const existing = await userData.getMeta(ctx.user_id!);
+        await userData.updateMeta(ctx.user_id!, { ...existing, ...input });
+        return await userData.getMeta(ctx.user_id!);
     }),
     updateProfile: needAuth.input(z.object({
         name: z.string().min(1, '昵称不能为空'),

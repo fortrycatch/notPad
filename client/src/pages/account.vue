@@ -1,7 +1,7 @@
 <template>
   <v-container class="py-8" fluid>
     <v-row class="mt-0">
-      <v-col cols="12" md="4">
+      <v-col cols="12" :md="mainStore.isGroupContext ? 6 : 4" :lg="mainStore.isGroupContext ? 5 : 4">
         <v-card variant="elevated" elevation="1">
           <v-card-item>
             <v-card-title class="text-title-md">个人资料</v-card-title>
@@ -16,6 +16,13 @@
             <span class="text-body-2 text-medium-emphasis mt-4">加载中…</span>
           </v-card-text>
           <v-card-text v-else>
+            <div class="d-flex flex-column align-center mb-4">
+              <v-avatar size="80" :color="userMeta.avatar ? undefined : 'primary'" variant="tonal" class="cursor-pointer" @click="avatarPicker = true">
+                <v-img v-if="userMeta.avatar" :src="(userMeta.avatar as string) + '?x-oss-process=image/resize,w_200'" />
+                <v-icon v-else size="36">mdi-account</v-icon>
+              </v-avatar>
+              <v-btn variant="text" size="small" class="mt-1" @click="avatarPicker = true">更换头像</v-btn>
+            </div>
             <v-form @submit.prevent="updateProfile">
               <v-text-field
                 v-model="profile.name"
@@ -42,6 +49,16 @@
                 density="comfortable"
                 hint="留空表示不修改密码"
                 persistent-hint
+                class="mb-4"
+              />
+              <v-textarea
+                v-model="(userMeta.bio as string)"
+                label="个人简介"
+                variant="outlined"
+                density="comfortable"
+                rows="2"
+                hide-details="auto"
+                @blur="saveBio"
               />
               <div class="d-flex justify-end mt-6">
                 <v-btn
@@ -58,46 +75,16 @@
           </v-card-text>
         </v-card>
 
-        <v-card variant="elevated" elevation="1" class="mt-4">
-          <v-card-item>
-            <template #append>
-              <v-btn
-                icon="mdi-refresh"
-                variant="text"
-                size="small"
-                :loading="recalculating"
-                @click="recalculate"
-              />
-            </template>
-            <v-card-title class="text-title-md">用量数据</v-card-title>
-          </v-card-item>
-          <v-divider />
-          <v-card-text v-if="statsLoading" class="d-flex align-center justify-center py-6">
-            <v-progress-circular indeterminate color="primary" size="28" width="2" />
-          </v-card-text>
-          <v-list v-else density="compact" class="py-0" bg-color="transparent">
-            <template v-for="(item, i) in statItems" :key="item.label">
-              <v-divider v-if="i > 0" />
-              <v-list-item class="px-4">
-                <template #prepend>
-                  <v-icon :icon="item.icon" :color="item.color" size="20" class="mr-3" />
-                </template>
-                <v-list-item-title class="text-body-2">
-                  {{ item.label }}
-                  <span v-if="item.size != null" class="text-caption text-medium-emphasis ml-1">
-                    {{ formatSize(item.size) }}
-                  </span>
-                </v-list-item-title>
-                <template #append>
-                  <span class="text-body-1 font-weight-bold">{{ item.count }}</span>
-                </template>
-              </v-list-item>
-            </template>
-          </v-list>
-        </v-card>
+        <UsageStatsCard
+          v-if="!mainStore.isGroupContext"
+          variant="personal"
+          class="mt-4"
+          @reloaded="showMsg('已重新统计')"
+          @error="(m) => showMsg(m, 'error')"
+        />
       </v-col>
 
-      <v-col cols="12" md="8">
+      <v-col v-if="!mainStore.isGroupContext" cols="12" md="8">
         <v-card variant="elevated" elevation="1">
           <v-card-item>
             <v-card-title class="text-title-md">登录设备</v-card-title>
@@ -269,12 +256,18 @@
         <v-btn variant="text" @click="snackbar.show = false">关闭</v-btn>
       </template>
     </v-snackbar>
+
+    <ImagePickerDialog v-model="avatarPicker" :current-url="(userMeta.avatar as string) || ''" @select="saveAvatar" />
   </v-container>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, reactive } from "vue";
+import { ref, onMounted, reactive, watch } from "vue";
 import { server } from "../server";
+import ImagePickerDialog from "../components/compose/ImagePickerDialog.vue";
+import UsageStatsCard from "../components/compose/UsageStatsCard.vue";
+import { bumpUserProfileDisplay } from "../utils/userProfileSync";
+import { useMainStore } from "../store/mainStore";
 
 type TokenRow = {
   token: string;
@@ -333,65 +326,15 @@ function deviceHint(ua: string | null): DeviceHint {
   };
 }
 
-type UsageStats = {
-  notes_count: number;
-  bookmarks_count: number;
-  images_count: number;
-  images_size: number;
-  files_count: number;
-  files_size: number;
-};
-
-const stats = ref<UsageStats | null>(null);
-const statsLoading = ref(true);
-const recalculating = ref(false);
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return bytes + " B";
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
-  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + " GB";
-}
-
-const statItems = computed(() => {
-  const s = stats.value;
-  return [
-    { label: "笔记", icon: "mdi-note-text-outline", color: "primary", count: s?.notes_count ?? 0, size: null as number | null },
-    { label: "书签", icon: "mdi-bookmark-outline", color: "secondary", count: s?.bookmarks_count ?? 0, size: null as number | null },
-    { label: "图片", icon: "mdi-image-outline", color: "info", count: s?.images_count ?? 0, size: s?.images_size ?? 0 },
-    { label: "文件", icon: "mdi-file-outline", color: "success", count: s?.files_count ?? 0, size: s?.files_size ?? 0 },
-  ];
-});
-
-async function loadStats() {
-  statsLoading.value = true;
-  try {
-    stats.value = await server.setting.getUsageStats.query();
-  } catch (e: any) {
-    console.error(e);
-  } finally {
-    statsLoading.value = false;
-  }
-}
-
-async function recalculate() {
-  recalculating.value = true;
-  try {
-    stats.value = await server.setting.recalculateStats.mutate();
-    showMsg("已重新统计");
-  } catch (e: any) {
-    console.error(e);
-    showMsg(e.message || "统计失败", "error");
-  } finally {
-    recalculating.value = false;
-  }
-}
+const mainStore = useMainStore();
 
 const profile = reactive({
   name: "",
   email: "",
   id: ""
 });
+const userMeta = reactive<Record<string, unknown>>({ avatar: '', bio: '' });
+const avatarPicker = ref(false);
 const password = ref("");
 const tokens = ref<TokenRow[]>([]);
 /** 首屏数据未返回前为 true，避免先闪现「暂无」等空状态 */
@@ -447,12 +390,38 @@ async function loadData() {
     profile.name = user.name;
     profile.email = user.email;
     profile.id = user.id;
-    await refreshTokens();
+    if (user.meta) {
+      Object.assign(userMeta, user.meta);
+    }
+    if (!mainStore.isGroupContext) {
+      await refreshTokens();
+    }
   } catch (error: any) {
     console.error(error);
     showMsg(error.message || "加载数据失败", "error");
   } finally {
     pageLoading.value = false;
+  }
+}
+
+async function saveAvatar(url: string) {
+  try {
+    const result = await server.auth.updateMeta.mutate({ avatar: url });
+    Object.assign(userMeta, result);
+    bumpUserProfileDisplay();
+    showMsg(url ? "头像已更新" : "头像已清除");
+  } catch (e: any) {
+    showMsg(e.message || "保存失败", "error");
+  }
+}
+
+async function saveBio() {
+  try {
+    const result = await server.auth.updateMeta.mutate({ bio: userMeta.bio });
+    Object.assign(userMeta, result);
+    showMsg("已保存");
+  } catch (e: any) {
+    showMsg(e.message || "保存失败", "error");
   }
 }
 
@@ -464,6 +433,7 @@ async function updateProfile() {
       email: profile.email,
       password: password.value || undefined
     });
+    bumpUserProfileDisplay();
     showMsg("已保存");
     password.value = "";
   } catch (error: any) {
@@ -513,8 +483,14 @@ async function confirmRevoke() {
   }
 }
 
+watch(
+  () => mainStore.isGroupContext,
+  (inGroup) => {
+    if (!inGroup) void refreshTokens();
+  }
+);
+
 onMounted(() => {
   loadData();
-  loadStats();
 });
 </script>

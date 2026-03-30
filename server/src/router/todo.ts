@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 import { pool } from '../database.js';
 import { todoListData, todoItemData, noteData, fileData, bookmarkData, ownerWhere } from '../utils/sqlData.js';
+import type { TodoRef } from '../utils/sqlData.js';
 import type { RowDataPacket } from 'mysql2';
 
 async function verifyListOwner(listId: string, userId: string, groupId: string | null) {
@@ -18,7 +19,7 @@ async function verifyItemOwner(itemId: string, userId: string, groupId: string |
   return item;
 }
 
-async function verifyRefTarget(refType: string, refId: string, userId: string, groupId: string | null) {
+async function verifyRefTarget(refType: string, refId: string, userId: string, groupId: string | null): Promise<TodoRef> {
   const ow = ownerWhere(userId, groupId);
   if (refType === 'note') {
     const note = await noteData.getNoteById(refId, userId, groupId);
@@ -51,13 +52,15 @@ async function verifyRefTarget(refType: string, refId: string, userId: string, g
   if (refType === 'bookmark') {
     const bookmark = await bookmarkData.getById(Number(refId), userId, groupId);
     if (!bookmark) throw new TRPCError({ code: 'BAD_REQUEST', message: '引用的书签不存在' });
+    const bookmarkType: NonNullable<TodoRef['bookmarkType']> =
+      bookmark.type === 'image' || bookmark.type === 'note' || bookmark.type === 'file'
+        ? bookmark.type
+        : 'url';
     return {
       type: 'bookmark' as const,
       refId,
       title: bookmark.title || '未命名书签',
-      bookmarkType: (bookmark.type === 'image' || bookmark.type === 'note' || bookmark.type === 'file')
-        ? bookmark.type
-        : 'url' as const,
+      bookmarkType,
       url: bookmark.url || undefined,
       targetRefId: bookmark.ref_id || undefined,
     };
@@ -93,13 +96,15 @@ const todoRefInput = z.discriminatedUnion('type', [
   }),
 ]);
 
+type TodoRefInput = z.infer<typeof todoRefInput>;
+
 async function normalizeRefs(
-  refs: z.infer<typeof todoRefInput>[],
+  refs: TodoRefInput[],
   userId: string,
   groupId: string | null,
-) {
+) : Promise<TodoRef[]> {
   const normalized = await Promise.all(refs.map(ref => verifyRefTarget(ref.type, ref.refId, userId, groupId)));
-  const unique = new Map<string, (typeof normalized)[number]>();
+  const unique = new Map<string, TodoRef>();
   for (const ref of normalized) {
     unique.set(`${ref.type}:${ref.refId}`, ref);
   }
@@ -163,10 +168,18 @@ export default router({
     refs: z.array(todoRefInput).max(32).optional(),
     sort_order: z.number().int().optional(),
   })).mutation(async ({ ctx, input }) => {
-    const { id, ...fields } = input;
+    const { id, refs, ...rest } = input;
     await verifyItemOwner(id, ctx.user_id!, ctx.group_id);
-    if (fields.refs) {
-      fields.refs = await normalizeRefs(fields.refs, ctx.user_id!, ctx.group_id);
+    const fields: {
+      title?: string;
+      description?: string;
+      done?: number;
+      color?: string | null;
+      refs?: TodoRef[];
+      sort_order?: number;
+    } = { ...rest };
+    if (refs !== undefined) {
+      fields.refs = await normalizeRefs(refs, ctx.user_id!, ctx.group_id);
     }
     const ok = await todoItemData.update(id, fields);
     if (!ok) throw new TRPCError({ code: 'NOT_FOUND', message: '待办不存在' });

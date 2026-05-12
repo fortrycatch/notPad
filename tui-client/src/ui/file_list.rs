@@ -25,9 +25,14 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     };
 
     let constraints: Vec<Constraint> = if dash_h == 0 {
-        vec![Constraint::Length(3), Constraint::Min(0)]
+        vec![
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Min(0),
+        ]
     } else {
         vec![
+            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Min(0),
             Constraint::Length(dash_h),
@@ -39,9 +44,10 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
         .split(area);
 
     render_breadcrumbs(f, app, chunks[0]);
-    render_listing(f, app, chunks[1]);
+    render_search(f, app, chunks[1]);
+    render_listing(f, app, chunks[2]);
     if dash_h > 0 {
-        render_downloads_dashboard(f, app, chunks[2], active);
+        render_downloads_dashboard(f, app, chunks[3], active);
     }
 }
 
@@ -55,6 +61,24 @@ fn render_breadcrumbs(f: &mut Frame, app: &App, area: Rect) {
     }
     let block = Block::default().borders(Borders::ALL).title(" 路径 ");
     let para = Paragraph::new(Line::from(spans)).block(block);
+    f.render_widget(para, area);
+}
+
+fn render_search(f: &mut Frame, app: &App, area: Rect) {
+    let scope = if app.file.search_all {
+        "所有文件"
+    } else {
+        "当前目录"
+    };
+    let text = if app.file.search.is_empty() {
+        format!("{scope} · (空)")
+    } else {
+        format!("{scope} · {}", app.file.search)
+    };
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" 搜索 (按 / 修改，c 清除，s 范围) ");
+    let para = Paragraph::new(text).block(block);
     f.render_widget(para, area);
 }
 

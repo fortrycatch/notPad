@@ -48,6 +48,8 @@ pub struct FileState {
     pub folders: Vec<DriveFolder>,
     pub files: Vec<DriveFile>,
     pub cursor: usize, // index across folders+files
+    pub search: String,
+    pub search_all: bool,
     pub loading: bool,
     pub last_link: Option<String>,
     pub downloads: Vec<DownloadTask>,
@@ -59,9 +61,15 @@ impl App {
     pub(super) fn fetch_drive(&mut self, folder_id: Option<String>) {
         self.file.loading = true;
         let folder_clone = folder_id.clone();
+        let search = self.file.search.trim().to_string();
+        let search_scope = if self.file.search_all {
+            "all".to_string()
+        } else {
+            "current".to_string()
+        };
         self.spawn(move |api| async move {
             let res = api
-                .drive_list(folder_clone, 0, "time_desc", "", "current")
+                .drive_list(folder_clone, 0, "time_desc", &search, &search_scope)
                 .await;
             Box::new(move |app: &mut App| {
                 app.file.loading = false;
@@ -99,6 +107,24 @@ impl App {
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
             KeyCode::Char('r') => self.fetch_drive(self.file.current_folder.clone()),
+            KeyCode::Char('/') => self.open_drive_search_modal(),
+            KeyCode::Char('c') => {
+                if !self.file.search.is_empty() {
+                    self.file.search.clear();
+                    self.fetch_drive(self.file.current_folder.clone());
+                    self.set_status("已清除网盘搜索", false);
+                }
+            }
+            KeyCode::Char('s') => {
+                self.file.search_all = !self.file.search_all;
+                self.fetch_drive(self.file.current_folder.clone());
+                let label = if self.file.search_all {
+                    "所有文件"
+                } else {
+                    "当前目录"
+                };
+                self.set_status(format!("网盘搜索范围: {label}"), false);
+            }
             KeyCode::Up | KeyCode::Char('k') => {
                 if self.file.cursor > 0 {
                     self.file.cursor -= 1;
@@ -209,6 +235,19 @@ impl App {
             }
             _ => {}
         }
+    }
+
+    fn open_drive_search_modal(&mut self) {
+        let cur = self.file.search.clone();
+        self.modal = Some(Modal::Input {
+            title: "搜索网盘".into(),
+            prompt: "关键词（留空清除）".into(),
+            value: cur,
+            on_submit: Box::new(|app: &mut App, val: String| {
+                app.file.search = val.trim().to_string();
+                app.fetch_drive(app.file.current_folder.clone());
+            }),
+        });
     }
 
     /// Pop the destination picker for `file`. The picker offers two

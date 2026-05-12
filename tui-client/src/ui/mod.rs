@@ -71,14 +71,6 @@ fn render_top_bar(f: &mut Frame, app: &App, area: Rect) {
         Span::raw(app.api.base_url().to_string()),
         Span::raw("  ·  "),
         Span::raw(user),
-        Span::raw("  ·  "),
-        Span::styled(
-            format!(" {} ", scope.label),
-            Style::default()
-                .fg(scope.chip_fg)
-                .bg(scope.chip_bg)
-                .add_modifier(Modifier::BOLD),
-        ),
         Span::raw(format!(" {spinner}")),
     ]);
     let block = Block::default()
@@ -135,7 +127,7 @@ fn render_bottom_bar(f: &mut Frame, app: &App, area: Rect) {
             "选择上传目录: j/k 移动  Enter 进入文件夹  Backspace 上级  u/Space 上传到当前目录  Esc 取消"
         }
         (Tab::File, _) => {
-            "1-6 切换  g 群组  j/k  Enter 进入/下载菜单  Backspace 上级  u 上传  e 重命名  y 显示链接  r 刷新  Ctrl+D 下载管理器"
+            "1-6 切换  g 群组  j/k  / 搜索  c 清除  s 范围  Enter 进入/下载  Backspace 上级  u 上传  e 改名  y 链接  r 刷新  Ctrl+D 管理"
         }
         (Tab::Settings, _) => {
             "1-6 切换  Tab/h/l 切焦点  j/k  Enter 选择/编辑  Esc 取消/返回  Ctrl+D 下载管理器  q 退出"

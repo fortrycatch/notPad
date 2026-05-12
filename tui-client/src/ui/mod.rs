@@ -112,16 +112,16 @@ fn render_main_body(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_bottom_bar(f: &mut Frame, app: &App, area: Rect) {
     let hint = match (app.tab, app.notes.detail.is_some()) {
-        (Tab::Timeline, _) => "1-6 切换  g 群组  j/k 上下  r 刷新  Ctrl+D 下载管理器  Ctrl+C 退出",
+        (Tab::Timeline, _) => "1-6 切换  g 群组  j/k 上下  r 刷新  Ctrl+D 传输管理器  Ctrl+C 退出",
         (Tab::Notes, false) => {
-            "1-6 切换  g 群组  j/k  Enter 查看  n 新建  d 删除  t 标签  r 刷新  Ctrl+D 下载管理器  q 退出"
+            "1-6 切换  g 群组  j/k  Enter 查看  n 新建  d 删除  t 标签  r 刷新  Ctrl+D 传输管理器  q 退出"
         }
         (Tab::Notes, true) => "Esc/q 返回  e 编辑  t 标签  Tab 切焦点(标题/正文)  Ctrl+S 保存",
         (Tab::Todo, _) => {
-            "1-6 切换  g 群组  Tab 切焦点  j/k  Enter 切换完成/进入  n 新建  e 改名  d 删除  r 刷新  Ctrl+D 下载管理器"
+            "1-6 切换  g 群组  Tab 切焦点  j/k  Enter 切换完成/进入  n 新建  e 改名  d 删除  r 刷新  Ctrl+D 传输管理器"
         }
         (Tab::Image, _) => {
-            "1-6 切换  g 群组  j/k  / 搜索  e 重命名  y 显示URL  r 刷新  Ctrl+D 下载管理器"
+            "1-6 切换  g 群组  j/k  / 搜索  e 重命名  y 显示URL  r 刷新  Ctrl+D 传输管理器"
         }
         (Tab::File, _) if app.file.pending_upload_path.is_some() => {
             "选择上传目录: j/k 移动  Enter 进入文件夹  Backspace 上级  u/Space 上传到当前目录  Esc 取消"
@@ -130,7 +130,7 @@ fn render_bottom_bar(f: &mut Frame, app: &App, area: Rect) {
             "1-6 切换  g 群组  j/k  / 搜索  c 清除  s 范围  Enter 进入/下载  Backspace 上级  u 上传  e 改名  y 链接  r 刷新  Ctrl+D 管理"
         }
         (Tab::Settings, _) => {
-            "1-6 切换  Tab/h/l 切焦点  j/k  Enter 选择/编辑  Esc 取消/返回  Ctrl+D 下载管理器  q 退出"
+            "1-6 切换  Tab/h/l 切焦点  j/k  Enter 选择/编辑  Esc 取消/返回  Ctrl+D 传输管理器  q 退出"
         }
     };
 
@@ -170,6 +170,14 @@ fn render_bottom_bar(f: &mut Frame, app: &App, area: Rect) {
     // takes on the workspace tint, not just the text portion.
     let para = Paragraph::new(line).style(Style::default().fg(body_fg).bg(body_bg));
     f.render_widget(para, area);
+}
+
+pub(crate) fn selected_row_style(app: &App) -> Style {
+    let scope = scope_palette(app);
+    Style::default()
+        .fg(scope.bar_fg)
+        .bg(scope.bar_bg)
+        .add_modifier(Modifier::BOLD)
 }
 
 struct ScopePalette {

@@ -46,11 +46,7 @@ fn render_sections(f: &mut Frame, app: &App, area: Rect) {
     state.select(Some(app.settings.section_cursor));
     let list = List::new(items)
         .block(block)
-        .highlight_style(
-            Style::default()
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        )
+        .highlight_style(super::selected_row_style(app))
         .highlight_symbol("» ");
     f.render_stateful_widget(list, area, &mut state);
 }
@@ -339,7 +335,7 @@ fn render_account_in_group(f: &mut Frame, app: &App, area: Rect) {
     let block = account_section_block(" 账户 ", sel, chunks[2]);
     let inner = block.inner(chunks[2]);
     f.render_widget(block, chunks[2]);
-    let logout_line = account_logout_line(sel);
+    let logout_line = account_logout_line(app, sel);
     f.render_widget(Paragraph::new(logout_line), inner);
 }
 
@@ -362,7 +358,7 @@ fn render_account_personal(f: &mut Frame, app: &App, area: Rect) {
     let block = account_section_block(" 账户 ", logout_sel, chunks[2]);
     let inner = block.inner(chunks[2]);
     f.render_widget(block, chunks[2]);
-    let logout_line = account_logout_line(logout_sel);
+    let logout_line = account_logout_line(app, logout_sel);
     f.render_widget(Paragraph::new(logout_line), inner);
 
     render_devices_card(f, app, chunks[3]);
@@ -413,12 +409,12 @@ fn account_section_block(title: &str, selected: bool, _area: Rect) -> Block<'_> 
         .title(title.to_string())
 }
 
-fn account_logout_line(selected: bool) -> Line<'static> {
+fn account_logout_line(app: &App, selected: bool) -> Line<'static> {
     let sym = if selected { "» " } else { "  " };
     let base = Style::default()
         .fg(Color::LightRed)
         .add_modifier(Modifier::BOLD);
-    let st = account_row_style(selected, base);
+    let st = account_row_style(app, selected, base);
     Line::from(vec![Span::styled(sym, st), Span::styled("⏻ 退出登录", st)])
 }
 
@@ -458,7 +454,7 @@ fn render_usage_card(f: &mut Frame, app: &App, area: Rect) {
     } else {
         Style::default().fg(Color::LightGreen)
     };
-    let rec_st = account_row_style(sel, rec_style_base.add_modifier(Modifier::BOLD));
+    let rec_st = account_row_style(app, sel, rec_style_base.add_modifier(Modifier::BOLD));
     let rec_label = if app.settings.usage_recalculating {
         "↻ 正在重新统计…"
     } else {
@@ -467,14 +463,17 @@ fn render_usage_card(f: &mut Frame, app: &App, area: Rect) {
     let rec_line = Line::from(vec![
         Span::styled(if sel { "» " } else { "  " }, rec_st),
         Span::styled(rec_label, rec_st),
-        Span::styled("  Enter", Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            "  Enter",
+            account_row_style(app, sel, Style::default().fg(Color::DarkGray)),
+        ),
     ]);
     f.render_widget(Paragraph::new(rec_line), body[1]);
 }
 
-fn account_row_style(selected: bool, base: Style) -> Style {
+fn account_row_style(app: &App, selected: bool, base: Style) -> Style {
     if selected {
-        base.bg(Color::DarkGray)
+        super::selected_row_style(app)
     } else {
         base
     }
@@ -541,15 +540,17 @@ fn render_devices_card(f: &mut Frame, app: &App, area: Rect) {
             .unwrap_or_else(|| "无 UA".to_string());
 
         let st0 = account_row_style(
+            app,
             sel,
             Style::default()
                 .add_modifier(Modifier::BOLD)
                 .fg(Color::White),
         );
-        let st1 = account_row_style(sel, Style::default().fg(Color::DarkGray));
+        let st1 = account_row_style(app, sel, Style::default().fg(Color::DarkGray));
+        let kind_style = account_row_style(app, sel, Style::default().fg(Color::Cyan));
         lines.push(Line::from(vec![
             Span::styled(if sel { "» " } else { "  " }, st0),
-            Span::styled(format!("{kind} "), Style::default().fg(Color::Cyan)),
+            Span::styled(format!("{kind} "), kind_style),
             Span::styled(truncate_to_width(title, 36), st0),
         ]));
         lines.push(Line::from(vec![
@@ -662,9 +663,7 @@ fn highlight_style(app: &App) -> Style {
     // Only paint the selection bar when the right pane is focused, so the
     // user has an unambiguous focus indicator at any moment.
     if app.settings.focus_right {
-        Style::default()
-            .bg(Color::DarkGray)
-            .add_modifier(Modifier::BOLD)
+        super::selected_row_style(app)
     } else {
         Style::default()
     }

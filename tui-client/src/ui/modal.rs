@@ -4,7 +4,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
-use crate::app::{App, DownloadStatus, DownloadTask, Modal};
+use crate::app::{App, DownloadStatus, Modal, TransferRef, UploadStatus};
 use crate::util::{human_bytes, human_eta_secs, speed_fmt};
 
 pub fn render(f: &mut Frame, app: &App) {
@@ -28,18 +28,30 @@ pub fn render(f: &mut Frame, app: &App) {
             new_input,
             new_input_focus,
             ..
-        } => render_tag_picker(f, area, all, selected, *cursor, new_input, *new_input_focus),
-        Modal::GroupPicker { groups, cursor } => {
-            render_group_picker(f, area, groups, *cursor, app.active_group_id.as_deref())
-        }
+        } => render_tag_picker(
+            f,
+            app,
+            area,
+            all,
+            selected,
+            *cursor,
+            new_input,
+            *new_input_focus,
+        ),
+        Modal::GroupPicker { groups, cursor } => render_group_picker(
+            f,
+            app,
+            area,
+            groups,
+            *cursor,
+            app.active_group_id.as_deref(),
+        ),
         Modal::DownloadDest {
             file,
             cfg_path,
             cwd_path,
         } => render_download_dest(f, area, &file.name, cfg_path.as_deref(), cwd_path),
-        Modal::DownloadManager { cursor } => {
-            render_download_manager(f, area, &app.file.downloads, *cursor)
-        }
+        Modal::DownloadManager { cursor } => render_transfer_manager(f, app, area, *cursor),
     }
 }
 
@@ -133,6 +145,7 @@ fn render_message(f: &mut Frame, area: Rect, title: &str, body: &str) {
 
 fn render_tag_picker(
     f: &mut Frame,
+    app: &App,
     area: Rect,
     all: &[crate::api::dto::NoteTag],
     selected: &std::collections::HashSet<i64>,
@@ -166,7 +179,7 @@ fn render_tag_picker(
     let mut state = ListState::default();
     state.select(Some(cursor));
     let list = List::new(items)
-        .highlight_style(Style::default().bg(Color::DarkGray))
+        .highlight_style(super::selected_row_style(app))
         .highlight_symbol("» ");
     f.render_stateful_widget(list, inner[0], &mut state);
 
@@ -251,7 +264,73 @@ fn render_download_dest(
     );
 }
 
-fn render_download_manager(f: &mut Frame, area: Rect, tasks: &[DownloadTask], cursor: usize) {
+/// Snapshot of one task in a shape both rendering paths (manager modal +
+/// bottom dashboard) can render uniformly. Holds owned strings so the
+/// caller doesn't have to thread lifetimes through every helper.
+struct TransferRow {
+    name: String,
+    detail_path: std::path::PathBuf,
+    direction: char,   // ↑ upload, ↓ download
+    total: Option<u64>,
+    transferred: u64,
+    speed_bps: u64,
+    state: TransferState,
+}
+
+#[derive(Clone)]
+enum TransferState {
+    Active,
+    Completed,
+    Cancelled,
+    Failed(String),
+}
+
+impl TransferRow {
+    fn from_ref(t: &TransferRef<'_>) -> Self {
+        match t {
+            TransferRef::Upload(u) => TransferRow {
+                name: u.name.clone(),
+                detail_path: u.local_path.clone(),
+                direction: '↑',
+                total: Some(u.total),
+                transferred: u.uploaded,
+                speed_bps: u.speed_bps,
+                state: match &u.status {
+                    UploadStatus::Active => TransferState::Active,
+                    UploadStatus::Completed => TransferState::Completed,
+                    UploadStatus::Cancelled => TransferState::Cancelled,
+                    UploadStatus::Failed(e) => TransferState::Failed(e.clone()),
+                },
+            },
+            TransferRef::Download(d) => TransferRow {
+                name: d.name.clone(),
+                detail_path: d.save_path.clone(),
+                direction: '↓',
+                total: d.total,
+                transferred: d.downloaded,
+                speed_bps: d.speed_bps,
+                state: match &d.status {
+                    DownloadStatus::Active => TransferState::Active,
+                    DownloadStatus::Completed => TransferState::Completed,
+                    DownloadStatus::Cancelled => TransferState::Cancelled,
+                    DownloadStatus::Failed(e) => TransferState::Failed(e.clone()),
+                },
+            },
+        }
+    }
+}
+
+fn collect_transfer_rows(app: &App) -> Vec<TransferRow> {
+    let mut out: Vec<TransferRow> = Vec::with_capacity(app.transfer_count());
+    for i in 0..app.transfer_count() {
+        if let Some(r) = app.transfer_at(i) {
+            out.push(TransferRow::from_ref(&r));
+        }
+    }
+    out
+}
+
+fn render_transfer_manager(f: &mut Frame, app: &App, area: Rect, cursor: usize) {
     // Leave a 2-row margin on every side so the modal feels like a true
     // overlay instead of a full repaint.
     let w = area.width.saturating_sub(4).max(40);
@@ -259,17 +338,19 @@ fn render_download_manager(f: &mut Frame, area: Rect, tasks: &[DownloadTask], cu
     let r = centered(area, w, h);
     f.render_widget(Clear, r);
 
-    let mut counts = (0u32, 0u32, 0u32, 0u32); // active, completed, cancelled, failed
-    for t in tasks {
-        match &t.status {
-            DownloadStatus::Active => counts.0 += 1,
-            DownloadStatus::Completed => counts.1 += 1,
-            DownloadStatus::Cancelled => counts.2 += 1,
-            DownloadStatus::Failed(_) => counts.3 += 1,
+    let rows = collect_transfer_rows(app);
+    // (active, completed, cancelled, failed)
+    let mut counts = (0u32, 0u32, 0u32, 0u32);
+    for row in &rows {
+        match &row.state {
+            TransferState::Active => counts.0 += 1,
+            TransferState::Completed => counts.1 += 1,
+            TransferState::Cancelled => counts.2 += 1,
+            TransferState::Failed(_) => counts.3 += 1,
         }
     }
     let title = format!(
-        " 下载管理器  活动 {} · 完成 {} · 取消 {} · 失败 {} ",
+        " 传输管理器  活动 {} · 完成 {} · 取消 {} · 失败 {} ",
         counts.0, counts.1, counts.2, counts.3
     );
     let block = Block::default()
@@ -284,15 +365,15 @@ fn render_download_manager(f: &mut Frame, area: Rect, tasks: &[DownloadTask], cu
         .constraints([Constraint::Min(1), Constraint::Length(1)])
         .split(r);
 
-    if tasks.is_empty() {
+    if rows.is_empty() {
         let empty = Paragraph::new(Line::from(Span::styled(
-            "(尚无下载任务，去网盘 Tab 按 d 开始一项)",
+            "(尚无传输任务，去网盘 Tab 按 d 下载或 u 上传)",
             Style::default().fg(Color::DarkGray),
         )))
         .alignment(ratatui::layout::Alignment::Center);
         f.render_widget(empty, inner[0]);
     } else {
-        render_download_manager_list(f, inner[0], tasks, cursor);
+        render_transfer_list(f, app, inner[0], &rows, cursor);
     }
 
     let hint = Line::from(Span::styled(
@@ -302,11 +383,17 @@ fn render_download_manager(f: &mut Frame, area: Rect, tasks: &[DownloadTask], cu
     f.render_widget(Paragraph::new(hint), inner[1]);
 }
 
-fn render_download_manager_list(f: &mut Frame, area: Rect, tasks: &[DownloadTask], cursor: usize) {
+fn render_transfer_list(
+    f: &mut Frame,
+    app: &App,
+    area: Rect,
+    rows: &[TransferRow],
+    cursor: usize,
+) {
     const ROWS_PER_TASK: u16 = 2;
     // Compact layout: no extra gutter row, so the manager can show more tasks.
     let visible = (area.height / ROWS_PER_TASK).max(1) as usize;
-    let max = tasks.len();
+    let max = rows.len();
     // Center the cursor within the visible window when possible.
     let half = visible / 2;
     let start = if max <= visible || cursor < half {
@@ -320,7 +407,7 @@ fn render_download_manager_list(f: &mut Frame, area: Rect, tasks: &[DownloadTask
 
     let mut y = area.y;
     let area_right = area.x + area.width;
-    for (idx, t) in tasks[start..end].iter().enumerate() {
+    for (idx, t) in rows[start..end].iter().enumerate() {
         let abs = start + idx;
         let selected = abs == cursor;
         let row1 = Rect {
@@ -336,9 +423,11 @@ fn render_download_manager_list(f: &mut Frame, area: Rect, tasks: &[DownloadTask
             height: 1,
         };
 
-        let ratio = match (t.total, &t.status) {
-            (Some(total), _) if total > 0 => (t.downloaded as f64 / total as f64).clamp(0.0, 1.0),
-            (_, DownloadStatus::Completed) => 1.0,
+        let ratio = match (t.total, &t.state) {
+            (Some(total), _) if total > 0 => {
+                (t.transferred as f64 / total as f64).clamp(0.0, 1.0)
+            }
+            (_, TransferState::Completed) => 1.0,
             _ => 0.0,
         };
         let cursor_prefix = if selected { "» " } else { "  " };
@@ -356,10 +445,9 @@ fn render_download_manager_list(f: &mut Frame, area: Rect, tasks: &[DownloadTask
             width: row1.width.saturating_sub(2),
             height: 1,
         };
+        let selected_style = super::selected_row_style(app);
         let prefix_style = if selected {
-            Style::default()
-                .fg(Color::LightMagenta)
-                .add_modifier(Modifier::BOLD)
+            selected_style
         } else {
             Style::default()
         };
@@ -367,44 +455,50 @@ fn render_download_manager_list(f: &mut Frame, area: Rect, tasks: &[DownloadTask
             Paragraph::new(Line::from(Span::styled(cursor_prefix, prefix_style))),
             prefix_rect,
         );
-        let bar_color = match &t.status {
-            DownloadStatus::Active => Color::LightGreen,
-            DownloadStatus::Completed => Color::Green,
-            DownloadStatus::Cancelled => Color::DarkGray,
-            DownloadStatus::Failed(_) => Color::Red,
+        let bar_color = match &t.state {
+            TransferState::Active => Color::LightGreen,
+            TransferState::Completed => Color::Green,
+            TransferState::Cancelled => Color::DarkGray,
+            TransferState::Failed(_) => Color::Red,
         };
-        let (size_part, speed_eta_part) = task_progress_meta(t);
+        let (size_part, speed_eta_part) = transfer_progress_meta(t);
         let bar_width = line_rect.width.saturating_sub(40).clamp(10, 28) as usize;
-        let percent = match (t.total, &t.status) {
+        let percent = match (t.total, &t.state) {
             (Some(total), _) if total > 0 => format!("{:>3.0}%", ratio * 100.0),
-            (_, DownloadStatus::Completed) => "100%".to_string(),
+            (_, TransferState::Completed) => "100%".to_string(),
             _ => "  ?%".to_string(),
         };
         let bar = pip_bar(
             ratio,
             bar_width,
-            matches!(t.status, DownloadStatus::Completed),
+            matches!(t.state, TransferState::Completed),
         );
+        // Direction caret + 1 space lives in front of the name; reserve it
+        // when sizing the name slot so long names don't push everything off.
         let name_room = line_rect
             .width
             .saturating_sub(
-                (bar.len() + percent.len() + size_part.len() + speed_eta_part.len() + 8) as u16,
+                (bar.len() + percent.len() + size_part.len() + speed_eta_part.len() + 10) as u16,
             )
             .max(8) as usize;
         let name = summarize(&t.name, name_room);
-        let line = format!("{name} {bar} {percent} {size_part}{speed_eta_part}");
+        let line = format!(
+            "{} {name} {bar} {percent} {size_part}{speed_eta_part}",
+            t.direction
+        );
         let line_style = if selected {
-            Style::default().bg(Color::DarkGray).fg(bar_color)
+            selected_style
         } else {
             Style::default().fg(bar_color)
         };
         f.render_widget(Paragraph::new(line).style(line_style), line_rect);
 
-        // Detail row: save path + status. Trim path from the left when
-        // longer than the available width, so the file name stays visible.
-        let detail_line = task_detail_line(t, (area_right - row2.x) as usize);
+        // Detail row: source/destination path + status. Trim path from the
+        // left when longer than the available width, so the file name stays
+        // visible.
+        let detail_line = transfer_detail_line(t, (area_right - row2.x) as usize);
         let detail_style = if selected {
-            Style::default().bg(Color::DarkGray)
+            selected_style
         } else {
             Style::default()
         };
@@ -417,16 +511,18 @@ fn render_download_manager_list(f: &mut Frame, area: Rect, tasks: &[DownloadTask
     }
 }
 
-fn task_progress_meta(t: &DownloadTask) -> (String, String) {
-    match &t.status {
-        DownloadStatus::Active => {
+fn transfer_progress_meta(t: &TransferRow) -> (String, String) {
+    match &t.state {
+        TransferState::Active => {
             let size_part = match t.total {
-                Some(total) => format!("{} / {}", human_bytes(t.downloaded), human_bytes(total)),
-                None => format!("{} / ?", human_bytes(t.downloaded)),
+                Some(total) => {
+                    format!("{} / {}", human_bytes(t.transferred), human_bytes(total))
+                }
+                None => format!("{} / ?", human_bytes(t.transferred)),
             };
             let speed_eta_part = match (t.total, t.speed_bps) {
-                (Some(total), s) if s > 0 && total > t.downloaded => {
-                    let remaining = total - t.downloaded;
+                (Some(total), s) if s > 0 && total > t.transferred => {
+                    let remaining = total - t.transferred;
                     format!(
                         "  {}  ETA {}",
                         speed_fmt(t.speed_bps),
@@ -438,13 +534,13 @@ fn task_progress_meta(t: &DownloadTask) -> (String, String) {
             };
             (size_part, speed_eta_part)
         }
-        DownloadStatus::Completed => {
-            let size = t.total.unwrap_or(t.downloaded);
+        TransferState::Completed => {
+            let size = t.total.unwrap_or(t.transferred);
             (human_bytes(size), "  done".to_string())
         }
-        DownloadStatus::Cancelled => (human_bytes(t.downloaded), "  cancelled".to_string()),
-        DownloadStatus::Failed(e) => (
-            human_bytes(t.downloaded),
+        TransferState::Cancelled => (human_bytes(t.transferred), "  cancelled".to_string()),
+        TransferState::Failed(e) => (
+            human_bytes(t.transferred),
             format!("  failed: {}", summarize(e, 28)),
         ),
     }
@@ -475,16 +571,16 @@ fn pip_bar(ratio: f64, width: usize, completed: bool) -> String {
     bar
 }
 
-fn task_detail_line(t: &DownloadTask, max_width: usize) -> Line<'static> {
+fn transfer_detail_line(t: &TransferRow, max_width: usize) -> Line<'static> {
     let path_text = clip_left(
-        &t.save_path.display().to_string(),
+        &t.detail_path.display().to_string(),
         max_width.saturating_sub(2),
     );
-    let style = match &t.status {
-        DownloadStatus::Failed(_) => Style::default().fg(Color::LightRed),
-        DownloadStatus::Cancelled => Style::default().fg(Color::DarkGray),
-        DownloadStatus::Completed => Style::default().fg(Color::Green),
-        DownloadStatus::Active => Style::default().fg(Color::DarkGray),
+    let style = match &t.state {
+        TransferState::Failed(_) => Style::default().fg(Color::LightRed),
+        TransferState::Cancelled => Style::default().fg(Color::DarkGray),
+        TransferState::Completed => Style::default().fg(Color::Green),
+        TransferState::Active => Style::default().fg(Color::DarkGray),
     };
     Line::from(vec![Span::raw("  "), Span::styled(path_text, style)])
 }
@@ -519,6 +615,7 @@ fn summarize(s: &str, max: usize) -> String {
 
 fn render_group_picker(
     f: &mut Frame,
+    app: &App,
     area: Rect,
     groups: &[crate::api::dto::GroupItem],
     cursor: usize,
@@ -571,11 +668,7 @@ fn render_group_picker(
     let mut state = ListState::default();
     state.select(Some(cursor));
     let list = List::new(items)
-        .highlight_style(
-            Style::default()
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        )
+        .highlight_style(super::selected_row_style(app))
         .highlight_symbol("» ");
     f.render_stateful_widget(list, inner[0], &mut state);
 }

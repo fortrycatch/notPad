@@ -4,20 +4,27 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph};
 
-use crate::app::{App, DownloadStatus, DownloadTask};
+use crate::app::{App, DownloadStatus, DownloadTask, UploadStatus, UploadTask};
 use crate::util::{human_bytes, speed_fmt};
 
 /// Compact bottom dashboard caps at this many gauges to leave room for
-/// the file listing. The full picture lives in the download manager.
+/// the file listing. The full picture lives in the transfer manager.
 const DASH_MAX_ROWS: usize = 3;
 
 pub fn render(f: &mut Frame, app: &App, area: Rect) {
-    let active = app
+    let active_up = app
+        .file
+        .uploads
+        .iter()
+        .filter(|t| matches!(t.status, UploadStatus::Active))
+        .count();
+    let active_down = app
         .file
         .downloads
         .iter()
         .filter(|t| matches!(t.status, DownloadStatus::Active))
         .count();
+    let active = active_up + active_down;
     let dash_h: u16 = if active == 0 {
         0
     } else {
@@ -47,7 +54,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     render_search(f, app, chunks[1]);
     render_listing(f, app, chunks[2]);
     if dash_h > 0 {
-        render_downloads_dashboard(f, app, chunks[3], active);
+        render_transfers_dashboard(f, app, chunks[3], active_up, active_down);
     }
 }
 
@@ -137,61 +144,121 @@ fn render_listing(f: &mut Frame, app: &App, area: Rect) {
     state.select(Some(app.file.cursor));
     let list = List::new(items)
         .block(block)
-        .highlight_style(
-            Style::default()
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        )
+        .highlight_style(super::selected_row_style(app))
         .highlight_symbol("» ");
     f.render_stateful_widget(list, area, &mut state);
 }
 
-fn render_downloads_dashboard(f: &mut Frame, app: &App, area: Rect, active_count: usize) {
-    let total = app.file.downloads.len();
-    let title = format!(" 下载中 {}/{}  Ctrl+D 打开管理器 ", active_count, total);
+fn render_transfers_dashboard(
+    f: &mut Frame,
+    app: &App,
+    area: Rect,
+    active_up: usize,
+    active_down: usize,
+) {
+    let total = app.file.uploads.len() + app.file.downloads.len();
+    let active = active_up + active_down;
+    let title = format!(
+        " 传输中 {}/{}  ↑{} ↓{}  Ctrl+D 打开管理器 ",
+        active, total, active_up, active_down
+    );
     let block = Block::default().borders(Borders::ALL).title(title);
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    // Pick the first N active tasks. Other status tasks belong to the
-    // manager only — keep the dashboard tight.
-    let actives: Vec<&DownloadTask> = app
+    // Build a unified list of dashboard rows. Uploads are listed first so
+    // they don't get pushed off when both directions are running heavy.
+    enum Row<'a> {
+        Up(&'a UploadTask),
+        Down(&'a DownloadTask),
+    }
+    let mut rows: Vec<Row<'_>> = Vec::new();
+    for t in app
         .file
-        .downloads
+        .uploads
         .iter()
-        .filter(|t| matches!(t.status, DownloadStatus::Active))
-        .take(DASH_MAX_ROWS)
-        .collect();
+        .filter(|t| matches!(t.status, UploadStatus::Active))
+    {
+        rows.push(Row::Up(t));
+        if rows.len() >= DASH_MAX_ROWS {
+            break;
+        }
+    }
+    if rows.len() < DASH_MAX_ROWS {
+        for t in app
+            .file
+            .downloads
+            .iter()
+            .filter(|t| matches!(t.status, DownloadStatus::Active))
+        {
+            rows.push(Row::Down(t));
+            if rows.len() >= DASH_MAX_ROWS {
+                break;
+            }
+        }
+    }
 
     let mut y = inner.y;
-    for t in actives {
-        let row = Rect {
+    for row in rows {
+        let area_row = Rect {
             x: inner.x,
             y,
             width: inner.width,
             height: 1,
         };
-        let ratio = match t.total {
-            Some(total) if total > 0 => (t.downloaded as f64 / total as f64).clamp(0.0, 1.0),
-            _ => 0.0,
+        let (direction, gauge_color, name, ratio, transferred, total_opt, speed) = match row {
+            Row::Up(t) => {
+                let ratio = if t.total > 0 {
+                    (t.uploaded as f64 / t.total as f64).clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                (
+                    '↑',
+                    Color::LightCyan,
+                    t.name.as_str(),
+                    ratio,
+                    t.uploaded,
+                    Some(t.total),
+                    t.speed_bps,
+                )
+            }
+            Row::Down(t) => {
+                let ratio = match t.total {
+                    Some(total) if total > 0 => {
+                        (t.downloaded as f64 / total as f64).clamp(0.0, 1.0)
+                    }
+                    _ => 0.0,
+                };
+                (
+                    '↓',
+                    Color::LightGreen,
+                    t.name.as_str(),
+                    ratio,
+                    t.downloaded,
+                    t.total,
+                    t.speed_bps,
+                )
+            }
         };
         let percent = (ratio * 100.0) as u8;
-        let total_part = match t.total {
-            Some(total) => format!("{} / {}", human_bytes(t.downloaded), human_bytes(total)),
-            None => format!("{} / ?", human_bytes(t.downloaded)),
+        let total_part = match total_opt {
+            Some(total) => format!("{} / {}", human_bytes(transferred), human_bytes(total)),
+            None => format!("{} / ?", human_bytes(transferred)),
         };
         let label = format!(
-            "{}  {}%  {}  {}",
-            t.name,
+            "{} {}  {}%  {}  {}",
+            direction,
+            name,
             percent,
             total_part,
-            speed_fmt(t.speed_bps)
+            speed_fmt(speed)
         );
         let gauge = Gauge::default()
-            .gauge_style(Style::default().fg(Color::LightGreen))
+            .gauge_style(Style::default().fg(gauge_color))
             .ratio(ratio)
             .label(label);
-        f.render_widget(gauge, row);
+        f.render_widget(gauge, area_row);
         y += 1;
         if y >= inner.y + inner.height {
             break;

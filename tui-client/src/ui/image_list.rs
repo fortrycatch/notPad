@@ -55,11 +55,7 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     state.select(Some(app.image.cursor));
     let list = List::new(items)
         .block(block)
-        .highlight_style(
-            Style::default()
-                .bg(Color::DarkGray)
-                .add_modifier(Modifier::BOLD),
-        )
+        .highlight_style(super::selected_row_style(app))
         .highlight_symbol("» ");
     f.render_stateful_widget(list, chunks[1], &mut state);
 }

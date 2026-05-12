@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent};
 use futures::StreamExt;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 
 use super::{App, Modal, Msg};
@@ -41,6 +41,28 @@ pub struct DownloadTask {
     pub cancel: Arc<AtomicBool>,
 }
 
+#[derive(Debug, Clone)]
+pub enum UploadStatus {
+    Active,
+    Completed,
+    Failed(String),
+    Cancelled,
+}
+
+/// One upload. Mirrors `DownloadTask` so the transfer manager can render
+/// the two side by side. `total` is the local file size sampled before the
+/// PUT begins, so the gauge can show a real denominator from frame 1.
+pub struct UploadTask {
+    pub id: u64,
+    pub name: String,
+    pub local_path: PathBuf,
+    pub total: u64,
+    pub uploaded: u64,
+    pub status: UploadStatus,
+    pub speed_bps: u64,
+    pub cancel: Arc<AtomicBool>,
+}
+
 #[derive(Default)]
 pub struct FileState {
     pub current_folder: Option<String>,
@@ -54,7 +76,16 @@ pub struct FileState {
     pub last_link: Option<String>,
     pub downloads: Vec<DownloadTask>,
     pub next_download_id: u64,
+    pub uploads: Vec<UploadTask>,
+    pub next_upload_id: u64,
     pub pending_upload_path: Option<PathBuf>,
+}
+
+/// View into one transfer for the unified manager + dashboard. Borrowed
+/// so the modal can iterate without cloning task buffers each frame.
+pub enum TransferRef<'a> {
+    Upload(&'a UploadTask),
+    Download(&'a DownloadTask),
 }
 
 impl App {
@@ -414,46 +445,92 @@ impl App {
             self.set_status("无法解析文件名", true);
             return;
         };
+        // OSS PUT needs an accurate Content-Length. If we can't read the
+        // file size up-front we abort early instead of silently sending a
+        // chunked body that some object stores reject.
+        let file_size = match std::fs::metadata(&local_path) {
+            Ok(m) => m.len(),
+            Err(e) => {
+                self.set_status(format!("读取文件信息失败: {e}"), true);
+                return;
+            }
+        };
         let mime_type = infer_content_type(&local_path).to_string();
         let folder_id = self.file.current_folder.clone();
         let refresh_folder = folder_id.clone();
-        let display_path = local_path.display().to_string();
+
+        let id = self.file.next_upload_id;
+        self.file.next_upload_id = self.file.next_upload_id.wrapping_add(1);
+        let cancel = Arc::new(AtomicBool::new(false));
+        self.file.uploads.push(UploadTask {
+            id,
+            name: file_name.clone(),
+            local_path: local_path.clone(),
+            total: file_size,
+            uploaded: 0,
+            status: UploadStatus::Active,
+            speed_bps: 0,
+            cancel: cancel.clone(),
+        });
         self.set_status(format!("开始上传 {file_name} ..."), false);
+
         let tx = self.tx.clone();
         let api = self.api.clone();
+        let display_name = file_name.clone();
+        let cancel_for_task = cancel.clone();
         tokio::spawn(async move {
             let res: anyhow::Result<String> = async {
-                let bytes = tokio::fs::read(&local_path)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("读取文件失败 ({}): {e}", display_path))?;
                 let upload = api
                     .drive_get_upload_url(&file_name, &mime_type, folder_id.clone())
                     .await?;
-                let resp = api
-                    .http_client()
-                    .put(&upload.url)
-                    .header("content-type", &mime_type)
-                    .body(bytes)
-                    .send()
-                    .await
-                    .map_err(|e| anyhow::anyhow!("上传请求失败: {e}"))?;
-                if !resp.status().is_success() {
-                    let status = resp.status();
-                    let text = resp.text().await.unwrap_or_default();
-                    return Err(anyhow::anyhow!("上传对象存储失败: HTTP {status} {text}"));
-                }
+                stream_upload(
+                    &api.http_client(),
+                    &upload.url,
+                    &local_path,
+                    file_size,
+                    &mime_type,
+                    id,
+                    cancel_for_task.clone(),
+                    tx.clone(),
+                )
+                .await?;
                 let created = api
                     .drive_add_file(&file_name, &upload.filename, folder_id, &mime_type)
                     .await?;
                 Ok(created.name)
             }
             .await;
-            let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| match res {
-                Ok(name) => {
-                    app.set_status(format!("已上传 {name}"), false);
+            let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
+                let success = res.is_ok();
+                let (status_msg, is_error) = match &res {
+                    Ok(name) => (format!("已上传 {name}"), false),
+                    Err(e) => {
+                        if cancel_for_task.load(Ordering::Relaxed) {
+                            (format!("已取消上传 {display_name}"), false)
+                        } else {
+                            (format!("上传失败 {display_name}: {e}"), true)
+                        }
+                    }
+                };
+                if let Some(t) = app.file.uploads.iter_mut().find(|t| t.id == id) {
+                    match &res {
+                        Ok(_) => {
+                            t.status = UploadStatus::Completed;
+                            t.uploaded = t.total;
+                        }
+                        Err(e) => {
+                            if cancel_for_task.load(Ordering::Relaxed) {
+                                t.status = UploadStatus::Cancelled;
+                            } else {
+                                t.status = UploadStatus::Failed(e.to_string());
+                            }
+                        }
+                    }
+                }
+                app.set_status(status_msg, is_error);
+                if success {
                     app.fetch_drive(refresh_folder);
                 }
-                Err(e) => app.set_status(format!("上传失败: {e}"), true),
             })));
         });
     }
@@ -565,6 +642,58 @@ impl App {
                 self.set_status(e.to_string(), true);
                 None
             }
+        }
+    }
+
+    /// Total transfer rows surfaced by the manager modal, in the same
+    /// order it renders them: uploads first, then downloads.
+    pub fn transfer_count(&self) -> usize {
+        self.file.uploads.len() + self.file.downloads.len()
+    }
+
+    pub fn transfer_at(&self, idx: usize) -> Option<TransferRef<'_>> {
+        let up = self.file.uploads.len();
+        if idx < up {
+            self.file.uploads.get(idx).map(TransferRef::Upload)
+        } else {
+            self.file.downloads.get(idx - up).map(TransferRef::Download)
+        }
+    }
+
+    /// Trip the cancel flag for the active task at `idx`. Returns the
+    /// task name so the caller can flash a "正在取消" status.
+    pub fn cancel_transfer_at(&self, idx: usize) -> Option<String> {
+        match self.transfer_at(idx)? {
+            TransferRef::Upload(t) if matches!(t.status, UploadStatus::Active) => {
+                t.cancel.store(true, Ordering::Relaxed);
+                Some(t.name.clone())
+            }
+            TransferRef::Download(t) if matches!(t.status, DownloadStatus::Active) => {
+                t.cancel.store(true, Ordering::Relaxed);
+                Some(t.name.clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// Drop everything that's no longer running from both lists. Returns
+    /// the new total so the modal can reposition its cursor.
+    pub fn clear_finished_transfers(&mut self) -> usize {
+        self.file
+            .uploads
+            .retain(|t| matches!(t.status, UploadStatus::Active));
+        self.file
+            .downloads
+            .retain(|t| matches!(t.status, DownloadStatus::Active));
+        self.transfer_count()
+    }
+
+    /// Pair of (path-to-reveal, display-name) for the row at `idx`. Used
+    /// by the manager's `o` shortcut.
+    pub fn reveal_transfer_at(&self, idx: usize) -> Option<(PathBuf, String)> {
+        match self.transfer_at(idx)? {
+            TransferRef::Upload(t) => Some((t.local_path.clone(), t.name.clone())),
+            TransferRef::Download(t) => Some((t.save_path.clone(), t.name.clone())),
         }
     }
 }
@@ -721,6 +850,114 @@ async fn stream_download(
     let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
         if let Some(t) = app.file.downloads.iter_mut().find(|t| t.id == id) {
             t.downloaded = downloaded;
+        }
+    })));
+    Ok(())
+}
+
+/// Stream the local file to `url` via PUT, mirroring `stream_download`'s
+/// progress + cancel semantics. The body is sent as a chunk-driven
+/// `Stream<Item = Result<Vec<u8>, io::Error>>` so reqwest only buffers a
+/// single 64 KiB chunk at a time, and progress messages flow through `tx`.
+/// The Content-Length header is set explicitly because OSS-style endpoints
+/// reject `Transfer-Encoding: chunked`.
+#[allow(clippy::too_many_arguments)]
+async fn stream_upload(
+    http: &reqwest::Client,
+    url: &str,
+    local_path: &Path,
+    total: u64,
+    mime_type: &str,
+    id: u64,
+    cancel: Arc<AtomicBool>,
+    tx: mpsc::UnboundedSender<Msg>,
+) -> anyhow::Result<()> {
+    use anyhow::Context;
+
+    let file = tokio::fs::File::open(local_path)
+        .await
+        .with_context(|| format!("open {}", local_path.display()))?;
+
+    let cancel_for_stream = cancel.clone();
+    let tx_for_stream = tx.clone();
+    let throttle = Duration::from_millis(100);
+    let stream = futures::stream::unfold(
+        (file, 0u64, Instant::now(), 0u64),
+        move |(mut file, mut uploaded, mut last_emit, mut last_emit_bytes)| {
+            let cancel = cancel_for_stream.clone();
+            let tx = tx_for_stream.clone();
+            async move {
+                if cancel.load(Ordering::Relaxed) {
+                    return Some((
+                        Err::<Vec<u8>, std::io::Error>(std::io::Error::other("cancelled")),
+                        (file, uploaded, last_emit, last_emit_bytes),
+                    ));
+                }
+                let mut buf = vec![0u8; 64 * 1024];
+                match file.read(&mut buf).await {
+                    Ok(0) => None,
+                    Ok(n) => {
+                        buf.truncate(n);
+                        uploaded += n as u64;
+                        let now = Instant::now();
+                        if now.duration_since(last_emit) >= throttle {
+                            let delta_bytes = uploaded - last_emit_bytes;
+                            let delta_secs =
+                                now.duration_since(last_emit).as_secs_f64().max(0.001);
+                            let instant_bps = (delta_bytes as f64 / delta_secs) as u64;
+                            last_emit = now;
+                            last_emit_bytes = uploaded;
+                            let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
+                                if let Some(t) =
+                                    app.file.uploads.iter_mut().find(|t| t.id == id)
+                                {
+                                    t.uploaded = uploaded;
+                                    // Match the download EMA so the gauge
+                                    // jitter feels the same in both panes.
+                                    t.speed_bps = if t.speed_bps == 0 {
+                                        instant_bps
+                                    } else {
+                                        ((t.speed_bps as f64) * 0.7
+                                            + (instant_bps as f64) * 0.3)
+                                            as u64
+                                    };
+                                }
+                            })));
+                        }
+                        Some((Ok(buf), (file, uploaded, last_emit, last_emit_bytes)))
+                    }
+                    Err(e) => Some((Err(e), (file, uploaded, last_emit, last_emit_bytes))),
+                }
+            }
+        },
+    );
+
+    let body = reqwest::Body::wrap_stream(stream);
+    let resp = http
+        .put(url)
+        .header("content-type", mime_type)
+        .header("content-length", total)
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| {
+            if cancel.load(Ordering::Relaxed) {
+                anyhow::anyhow!("cancelled")
+            } else {
+                anyhow::anyhow!("上传请求失败: {e}")
+            }
+        })?;
+    if cancel.load(Ordering::Relaxed) {
+        return Err(anyhow::anyhow!("cancelled"));
+    }
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(anyhow::anyhow!("上传对象存储失败: HTTP {status} {text}"));
+    }
+    let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
+        if let Some(t) = app.file.uploads.iter_mut().find(|t| t.id == id) {
+            t.uploaded = t.total;
         }
     })));
     Ok(())

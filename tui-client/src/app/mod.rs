@@ -14,7 +14,9 @@ pub mod settings;
 pub mod timeline;
 pub mod todo;
 
-pub use file::{DownloadStatus, DownloadTask, FileState};
+pub use file::{
+    DownloadStatus, DownloadTask, FileState, TransferRef, UploadStatus, UploadTask,
+};
 pub use image::ImageState;
 pub use login::LoginState;
 pub use notes::{NoteDetail, NotesState};
@@ -680,7 +682,7 @@ impl App {
                 }
             },
             Some(Modal::DownloadManager { mut cursor }) => {
-                let len = self.file.downloads.len();
+                let len = self.transfer_count();
                 match key.code {
                     KeyCode::Esc | KeyCode::Char('q') => {}
                     KeyCode::Up | KeyCode::Char('k') => {
@@ -696,19 +698,13 @@ impl App {
                         self.modal = Some(Modal::DownloadManager { cursor });
                     }
                     KeyCode::Char('x') => {
-                        if let Some(t) = self.file.downloads.get(cursor)
-                            && matches!(t.status, DownloadStatus::Active)
-                        {
-                            t.cancel.store(true, std::sync::atomic::Ordering::Relaxed);
-                            self.set_status(format!("正在取消 {}", t.name), false);
+                        if let Some(name) = self.cancel_transfer_at(cursor) {
+                            self.set_status(format!("正在取消 {}", name), false);
                         }
                         self.modal = Some(Modal::DownloadManager { cursor });
                     }
                     KeyCode::Char('c') => {
-                        self.file
-                            .downloads
-                            .retain(|t| matches!(t.status, DownloadStatus::Active));
-                        let new_len = self.file.downloads.len();
+                        let new_len = self.clear_finished_transfers();
                         let new_cursor = if new_len == 0 {
                             0
                         } else {
@@ -716,15 +712,13 @@ impl App {
                         };
                         if new_len == 0 {
                             // Auto-close when nothing is left to look at.
-                            self.set_status("已清空下载列表", false);
+                            self.set_status("已清空传输列表", false);
                         } else {
                             self.modal = Some(Modal::DownloadManager { cursor: new_cursor });
                         }
                     }
                     KeyCode::Char('o') => {
-                        if let Some(t) = self.file.downloads.get(cursor) {
-                            let path = t.save_path.clone();
-                            let name = t.name.clone();
+                        if let Some((path, name)) = self.reveal_transfer_at(cursor) {
                             if let Err(e) = crate::util::reveal_in_explorer(&path) {
                                 self.set_status(format!("打开目录失败: {e}"), true);
                             } else {

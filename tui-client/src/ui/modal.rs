@@ -2,7 +2,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Clear, Gauge, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::app::{App, DownloadStatus, DownloadTask, Modal};
 use crate::util::{human_bytes, human_eta_secs, speed_fmt};
@@ -189,7 +189,7 @@ fn render_download_dest(
     cfg_path: Option<&std::path::Path>,
     cwd_path: &std::path::Path,
 ) {
-    let r = centered(area, 70, 9);
+    let r = centered(area, 80, 10);
     f.render_widget(Clear, r);
     let block = Block::default()
         .borders(Borders::ALL)
@@ -199,6 +199,7 @@ fn render_download_dest(
         .direction(Direction::Vertical)
         .margin(1)
         .constraints([
+            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Length(1),
@@ -231,14 +232,19 @@ fn render_download_dest(
             Style::default().fg(Color::LightCyan),
         ),
     ]);
+    let link_line = Line::from(vec![
+        Span::styled("[3] ", Style::default().fg(Color::Yellow)),
+        Span::raw("复制文件链接到剪贴板"),
+    ]);
     f.render_widget(Paragraph::new(cfg_line), inner[0]);
     f.render_widget(Paragraph::new(cwd_line), inner[1]);
+    f.render_widget(Paragraph::new(link_line), inner[2]);
     f.render_widget(
         Paragraph::new(Line::from(Span::styled(
-            "Enter=配置目录  1=配置  2=当前  Esc=取消",
+            "Enter/1=下载到配置目录  2=下载到当前目录  3=复制链接  Esc=取消",
             Style::default().fg(Color::DarkGray),
         ))),
-        inner[4],
+        inner[5],
     );
 }
 
@@ -300,9 +306,8 @@ fn render_download_manager_list(
     cursor: usize,
 ) {
     const ROWS_PER_TASK: u16 = 2;
-    // How many tasks fit on screen at once; reserve 1 row gutter between
-    // tasks so they don't blur together.
-    let visible = ((area.height + 1) / (ROWS_PER_TASK + 1)).max(1) as usize;
+    // Compact layout: no extra gutter row, so the manager can show more tasks.
+    let visible = (area.height / ROWS_PER_TASK).max(1) as usize;
     let max = tasks.len();
     // Center the cursor within the visible window when possible.
     let half = visible / 2;
@@ -333,14 +338,13 @@ fn render_download_manager_list(
             height: 1,
         };
 
-        let label = task_label(t);
         let ratio = match (t.total, &t.status) {
             (Some(total), _) if total > 0 => (t.downloaded as f64 / total as f64).clamp(0.0, 1.0),
             (_, DownloadStatus::Completed) => 1.0,
             _ => 0.0,
         };
         let cursor_prefix = if selected { "» " } else { "  " };
-        // Reserve a 2-col prefix column so the gauge starts after the
+        // Reserve a 2-col prefix column so the progress line starts after the
         // cursor caret.
         let prefix_rect = Rect {
             x: row1.x,
@@ -348,7 +352,7 @@ fn render_download_manager_list(
             width: 2.min(row1.width),
             height: 1,
         };
-        let gauge_rect = Rect {
+        let line_rect = Rect {
             x: row1.x + 2,
             y: row1.y,
             width: row1.width.saturating_sub(2),
@@ -365,17 +369,32 @@ fn render_download_manager_list(
             Paragraph::new(Line::from(Span::styled(cursor_prefix, prefix_style))),
             prefix_rect,
         );
-        let gauge_color = match &t.status {
+        let bar_color = match &t.status {
             DownloadStatus::Active => Color::LightGreen,
             DownloadStatus::Completed => Color::Green,
             DownloadStatus::Cancelled => Color::DarkGray,
             DownloadStatus::Failed(_) => Color::Red,
         };
-        let gauge = Gauge::default()
-            .gauge_style(Style::default().fg(gauge_color))
-            .ratio(ratio)
-            .label(label);
-        f.render_widget(gauge, gauge_rect);
+        let (size_part, speed_eta_part) = task_progress_meta(t);
+        let bar_width = line_rect.width.saturating_sub(40).clamp(10, 28) as usize;
+        let percent = match (t.total, &t.status) {
+            (Some(total), _) if total > 0 => format!("{:>3.0}%", ratio * 100.0),
+            (_, DownloadStatus::Completed) => "100%".to_string(),
+            _ => "  ?%".to_string(),
+        };
+        let bar = pip_bar(ratio, bar_width, matches!(t.status, DownloadStatus::Completed));
+        let name_room = line_rect
+            .width
+            .saturating_sub((bar.len() + percent.len() + size_part.len() + speed_eta_part.len() + 8) as u16)
+            .max(8) as usize;
+        let name = summarize(&t.name, name_room);
+        let line = format!("{name} {bar} {percent} {size_part}{speed_eta_part}");
+        let line_style = if selected {
+            Style::default().bg(Color::DarkGray).fg(bar_color)
+        } else {
+            Style::default().fg(bar_color)
+        };
+        f.render_widget(Paragraph::new(line).style(line_style), line_rect);
 
         // Detail row: save path + status. Trim path from the left when
         // longer than the available width, so the file name stays visible.
@@ -390,42 +409,65 @@ fn render_download_manager_list(
             row2,
         );
 
-        y += ROWS_PER_TASK + 1;
+        y += ROWS_PER_TASK;
         if y >= area.y + area.height {
             break;
         }
     }
 }
 
-fn task_label(t: &DownloadTask) -> String {
+fn task_progress_meta(t: &DownloadTask) -> (String, String) {
     match &t.status {
         DownloadStatus::Active => {
-            let total_part = match t.total {
+            let size_part = match t.total {
                 Some(total) => format!("{} / {}", human_bytes(t.downloaded), human_bytes(total)),
                 None => format!("{} / ?", human_bytes(t.downloaded)),
             };
-            let eta_part = match (t.total, t.speed_bps) {
+            let speed_eta_part = match (t.total, t.speed_bps) {
                 (Some(total), s) if s > 0 && total > t.downloaded => {
                     let remaining = total - t.downloaded;
-                    format!("  ETA {}", human_eta_secs(remaining / s))
+                    format!("  {}  ETA {}", speed_fmt(t.speed_bps), human_eta_secs(remaining / s))
                 }
-                _ => String::new(),
+                _ if t.speed_bps > 0 => format!("  {}", speed_fmt(t.speed_bps)),
+                _ => String::new()
             };
-            format!(
-                "📥 {}   {}   {}{}",
-                t.name,
-                total_part,
-                speed_fmt(t.speed_bps),
-                eta_part
-            )
+            (size_part, speed_eta_part)
         }
         DownloadStatus::Completed => {
             let size = t.total.unwrap_or(t.downloaded);
-            format!("✓ {}   {}   已完成", t.name, human_bytes(size))
+            (human_bytes(size), "  done".to_string())
         }
-        DownloadStatus::Cancelled => format!("✗ {}   已取消", t.name),
-        DownloadStatus::Failed(e) => format!("✗ {}   失败: {}", t.name, summarize(e, 40)),
+        DownloadStatus::Cancelled => (human_bytes(t.downloaded), "  cancelled".to_string()),
+        DownloadStatus::Failed(e) => (
+            human_bytes(t.downloaded),
+            format!("  failed: {}", summarize(e, 28)),
+        ),
     }
+}
+
+fn pip_bar(ratio: f64, width: usize, completed: bool) -> String {
+    if width == 0 {
+        return "[]".to_string();
+    }
+    let clamped = ratio.clamp(0.0, 1.0);
+    let filled = (clamped * width as f64).round() as usize;
+    let mut bar = String::with_capacity(width + 2);
+    bar.push('[');
+    if completed {
+        bar.extend(std::iter::repeat_n('=', width));
+    } else {
+        for i in 0..width {
+            if i < filled {
+                bar.push('=');
+            } else if i == filled && filled < width && filled > 0 {
+                bar.push('>');
+            } else {
+                bar.push('-');
+            }
+        }
+    }
+    bar.push(']');
+    bar
 }
 
 fn task_detail_line(t: &DownloadTask, max_width: usize) -> Line<'static> {

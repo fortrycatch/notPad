@@ -372,6 +372,28 @@ pub struct DriveListInput {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct DriveGetUploadUrlInput {
+    pub filename: String,
+    #[serde(rename = "type")]
+    pub content_type: String,
+    pub folder_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DriveUploadUrlResp {
+    pub url: String,
+    pub filename: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DriveAddFileInput {
+    pub name: String,
+    pub filename: String,
+    pub folder_id: Option<String>,
+    pub mime_type: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct RenameFileInput {
     pub id: i64,
     pub name: String,

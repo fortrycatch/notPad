@@ -1,0 +1,403 @@
+cargo : warning: large size difference between variants
+所在位置 C:\Users\Administrator\AppData\Local\Temp\ps-script-ccc46744-ff43-406d-8111-3709f30ae705.ps1:80 字符: 1
++ cargo clippy --color never --all-targets 2>&1 > clippy_out.txt; Get-C ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (warning: large ...etween variants:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+   --> src\app.rs:92:1
+    |
+ 92 | /   pub enum NoteDetail {
+ 93 | |       Loading(String),
+ 94 | | /     View {
+ 95 | | |         note: Note,
+ 96 | | |         tags: Vec<NoteTag>,
+ 97 | | |     },
+    | | |_____- the second-largest variant contains at least 168 bytes
+ 98 | | /     Edit {
+ 99 | | |         id: Option<String>,
+100 | | |         title: String,
+101 | | |         title_focus: bool,
+102 | | |         textarea: TextArea<'static>,
+103 | | |         original_tags: Vec<NoteTag>,
+104 | | |     },
+    | | |_____- the largest variant contains at least 649 bytes
+105 | |   }
+    | |___^ the entire enum is at least 656 bytes
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#large_enum_var
+iant
+    = note: `#[warn(clippy::large_enum_variant)]` on by default
+help: consider boxing the large fields or introducing indirection in some other way to reduce the total size of the enu
+m
+    |
+102 -         textarea: TextArea<'static>,
+102 +         textarea: Box<TextArea<'static>>,
+    |
+
+warning: this `impl` can be derived
+   --> src\app.rs:188:1
+    |
+188 | / impl Default for SettingsState {
+189 | |     fn default() -> Self {
+190 | |         Self {
+191 | |             section_cursor: 0,
+...   |
+199 | | }
+    | |_^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#derivable_impl
+s
+    = note: `#[warn(clippy::derivable_impls)]` on by default
+help: replace the manual implementation with a derive attribute
+    |
+179 + #[derive(Default)]
+180 | pub struct SettingsState {
+    |
+
+warning: very complex type used. Consider factoring parts into `type` definitions
+   --> src\app.rs:216:20
+    |
+216 |         on_submit: Box<dyn FnOnce(&mut App, String) + Send>,
+    |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#type_complexit
+y
+    = note: `#[warn(clippy::type_complexity)]` on by default
+
+warning: you seem to be trying to use `match` for destructuring a single pattern. Consider using `if let`
+   --> src\app.rs:374:43
+    |
+374 |               Box::new(move |app: &mut App| match res {
+    |  ___________________________________________^
+375 | |                 Ok(p) => {
+376 | |                     app.username = Some(p.name);
+377 | |                     app.user_primary_color = p
+...   |
+384 | |                 Err(_) => {}
+385 | |             })
+    | |_____________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#single_match
+    = note: `#[warn(clippy::single_match)]` on by default
+help: try
+    |
+374 ~             Box::new(move |app: &mut App| if let Ok(p) = res {
+375 +                 app.username = Some(p.name);
+376 +                 app.user_primary_color = p
+377 +                     .meta
+378 +                     .get("primaryColor")
+379 +                     .and_then(|v| v.as_str())
+380 +                     .filter(|s| !s.is_empty())
+381 +                     .map(|s| s.to_string());
+382 ~             })
+    |
+
+warning: this `if` can be collapsed into the outer `match`
+   --> src\app.rs:899:29
+    |
+899 | / ...                   if !new_input.trim().is_empty() {
+900 | | ...                       let name = new_input.trim().to_string();
+901 | | ...                       let nid = note_id.clone();
+902 | | ...                       self.spawn(move |api| async move {
+...   |
+923 | | ...                       new_input_focus = false;
+924 | | ...                   }
+    | |_______________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_ma
+tch
+    = note: `#[warn(clippy::collapsible_match)]` on by default
+help: collapse nested if block
+    |
+898 ~                         KeyCode::Enter
+899 ~                             if !new_input.trim().is_empty() => {
+900 |                                 let name = new_input.trim().to_string();
+...
+923 |                                 new_input_focus = false;
+924 ~                             }
+    |
+
+warning: this `if` can be collapsed into the outer `match`
+   --> src\app.rs:944:29
+    |
+944 | / ...                   if !all.is_empty() && cursor > 0 {
+945 | | ...                       cursor -= 1;
+946 | | ...                   }
+    | |_______________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_ma
+tch
+help: collapse nested if block
+    |
+943 ~                         KeyCode::Up | KeyCode::Char('k')
+944 ~                             if !all.is_empty() && cursor > 0 => {
+945 |                                 cursor -= 1;
+946 ~                             }
+    |
+
+warning: this `if` can be collapsed into the outer `match`
+   --> src\app.rs:949:29
+    |
+949 | / ...                   if !all.is_empty() && cursor + 1 < all.len() {
+950 | | ...                       cursor += 1;
+951 | | ...                   }
+    | |_______________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_ma
+tch
+help: collapse nested if block
+    |
+948 ~                         KeyCode::Down | KeyCode::Char('j')
+949 ~                             if !all.is_empty() && cursor + 1 < all.len() => {
+950 |                                 cursor += 1;
+951 ~                             }
+    |
+
+warning: implicitly performing saturating subtraction
+   --> src\app.rs:989:25
+    |
+989 | /                         if cursor > 0 {
+990 | |                             cursor -= 1;
+991 | |                         }
+    | |_________________________^ help: try: `cursor = cursor.saturating_sub(1);`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#implicit_satur
+ating_sub
+    = note: `#[warn(clippy::implicit_saturating_sub)]` on by default
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1021:17
+     |
+1021 | /                 if self.timeline.cursor > 0 {
+1022 | |                     self.timeline.cursor -= 1;
+1023 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1020 ~             KeyCode::Up | KeyCode::Char('k')
+1021 ~                 if self.timeline.cursor > 0 => {
+1022 |                     self.timeline.cursor -= 1;
+1023 ~                 }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1086:17
+     |
+1086 | /                 if self.notes.cursor > 0 {
+1087 | |                     self.notes.cursor -= 1;
+1088 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1085 ~             KeyCode::Up | KeyCode::Char('k')
+1086 ~                 if self.notes.cursor > 0 => {
+1087 |                     self.notes.cursor -= 1;
+1088 ~                 }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1480:17
+     |
+1480 | /                 if self.image.cursor > 0 {
+1481 | |                     self.image.cursor -= 1;
+1482 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1479 ~             KeyCode::Up | KeyCode::Char('k')
+1480 ~                 if self.image.cursor > 0 => {
+1481 |                     self.image.cursor -= 1;
+1482 ~                 }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1551:17
+     |
+1551 | /                 if self.file.cursor > 0 {
+1552 | |                     self.file.cursor -= 1;
+1553 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1550 ~             KeyCode::Up | KeyCode::Char('k')
+1551 ~                 if self.file.cursor > 0 => {
+1552 |                     self.file.cursor -= 1;
+1553 ~                 }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1556:17
+     |
+1556 | /                 if self.file.cursor + 1 < total {
+1557 | |                     self.file.cursor += 1;
+1558 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1555 ~             KeyCode::Down | KeyCode::Char('j')
+1556 ~                 if self.file.cursor + 1 < total => {
+1557 |                     self.file.cursor += 1;
+1558 ~                 }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1561:17
+     |
+1561 | /                 if self.file.breadcrumbs.len() >= 2 {
+1562 | |                     let parent = self
+1563 | |                         .file
+1564 | |                         .breadcrumbs
+...    |
+1567 | |                     self.fetch_drive(parent);
+1568 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1560 ~             KeyCode::Backspace
+1561 ~                 if self.file.breadcrumbs.len() >= 2 => {
+1562 |                     let parent = self
+ ...
+1567 |                     self.fetch_drive(parent);
+1568 ~                 }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1587:17
+     |
+1587 | /                 if self.file.cursor >= self.file.folders.len() {
+1588 | |                     let i = self.file.cursor - self.file.folders.len();
+1589 | |                     if let Some(file) = self.file.files.get(i) {
+1590 | |                         let url = file
+...    |
+1597 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1586 ~             KeyCode::Char('y')
+1587 ~                 if self.file.cursor >= self.file.folders.len() => {
+1588 |                     let i = self.file.cursor - self.file.folders.len();
+ ...
+1596 |                     }
+1597 ~                 }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1691:21
+     |
+1691 | /                     if self.settings.custom_input.chars().count() < 7 {
+1692 | |                         self.settings.custom_input.push(c);
+1693 | |                     }
+     | |_____________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1690 ~                 KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL)
+1691 ~                     && self.settings.custom_input.chars().count() < 7 => {
+1692 |                         self.settings.custom_input.push(c);
+1693 ~                     }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1728:17
+     |
+1728 | /                 if self.settings.section_cursor > 0 {
+1729 | |                     self.settings.section_cursor -= 1;
+1730 | |                     self.settings.action_cursor = 0;
+1731 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1727 ~             KeyCode::Up | KeyCode::Char('k')
+1728 ~                 if self.settings.section_cursor > 0 => {
+1729 |                     self.settings.section_cursor -= 1;
+1730 |                     self.settings.action_cursor = 0;
+1731 ~                 }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1734:17
+     |
+1734 | /                 if self.settings.section_cursor + 1 < sections {
+1735 | |                     self.settings.section_cursor += 1;
+1736 | |                     self.settings.action_cursor = 0;
+1737 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1733 ~             KeyCode::Down | KeyCode::Char('j')
+1734 ~                 if self.settings.section_cursor + 1 < sections => {
+1735 |                     self.settings.section_cursor += 1;
+1736 |                     self.settings.action_cursor = 0;
+1737 ~                 }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1757:17
+     |
+1757 | /                 if self.settings.action_cursor > 0 {
+1758 | |                     self.settings.action_cursor -= 1;
+1759 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1756 ~             KeyCode::Up | KeyCode::Char('k')
+1757 ~                 if self.settings.action_cursor > 0 => {
+1758 |                     self.settings.action_cursor -= 1;
+1759 ~                 }
+     |
+
+warning: this `if` can be collapsed into the outer `match`
+    --> src\app.rs:1762:17
+     |
+1762 | /                 if self.settings.action_cursor + 1 < total {
+1763 | |                     self.settings.action_cursor += 1;
+1764 | |                 }
+     | |_________________^
+     |
+     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_m
+atch
+help: collapse nested if block
+     |
+1761 ~             KeyCode::Down | KeyCode::Char('j')
+1762 ~                 if self.settings.action_cursor + 1 < total => {
+1763 |                     self.settings.action_cursor += 1;
+1764 ~                 }
+     |
+
+warning: `note` (bin "note" test) generated 20 warnings (run `cargo clippy --fix --bin "note" -p note --tests -- ` to a
+pply 18 suggestions)
+warning: `note` (bin "note") generated 20 warnings (20 duplicates)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s

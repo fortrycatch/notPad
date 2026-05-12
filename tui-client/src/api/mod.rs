@@ -416,6 +416,38 @@ impl ApiClient {
             .await
     }
 
+    pub async fn drive_get_upload_url(
+        &self,
+        local_filename: &str,
+        content_type: &str,
+        folder_id: Option<String>,
+    ) -> Result<DriveUploadUrlResp> {
+        let input = DriveGetUploadUrlInput {
+            filename: local_filename.to_string(),
+            content_type: content_type.to_string(),
+            folder_id,
+        };
+        self.query::<DriveGetUploadUrlInput, DriveUploadUrlResp>("file_drive.getUploadUrl", Some(&input))
+            .await
+    }
+
+    pub async fn drive_add_file(
+        &self,
+        name: &str,
+        oss_filename: &str,
+        folder_id: Option<String>,
+        mime_type: &str,
+    ) -> Result<DriveFile> {
+        let input = DriveAddFileInput {
+            name: name.to_string(),
+            filename: oss_filename.to_string(),
+            folder_id,
+            mime_type: mime_type.to_string(),
+        };
+        self.mutation::<DriveAddFileInput, DriveFile>("file_drive.addFile", &input)
+            .await
+    }
+
     // setting (usage)
     pub async fn get_usage_stats(&self) -> Result<UsageStats> {
         self.query_no_input::<UsageStats>("setting.getUsageStats")

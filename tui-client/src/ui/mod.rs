@@ -133,7 +133,7 @@ fn render_bottom_bar(f: &mut Frame, app: &App, area: Rect) {
             "1-6 切换  g 群组  j/k  / 搜索  e 重命名  y 显示URL  r 刷新  Ctrl+D 下载管理器"
         }
         (Tab::File, _) => {
-            "1-6 切换  g 群组  j/k  Enter 进入/显示链接  Backspace 上级  d 下载  e 重命名  y 显示链接  r 刷新  Ctrl+D 下载管理器"
+            "1-6 切换  g 群组  j/k  Enter 进入/下载菜单  Backspace 上级  u 上传  e 重命名  y 显示链接  r 刷新  Ctrl+D 下载管理器"
         }
         (Tab::Settings, _) => {
             "1-6 切换  Tab/h/l 切焦点  j/k  Enter 选择/编辑  Esc 取消/返回  Ctrl+D 下载管理器  q 退出"
@@ -193,7 +193,8 @@ fn scope_palette(app: &App) -> ScopePalette {
     // Prefer the user-configured `meta.primaryColor` from the active scope.
     if let Some((bg_color, bg_rgb)) = app
         .active_primary_color()
-        .and_then(|hex| parse_hex(&hex).map(|rgb| (Color::Rgb(rgb.0, rgb.1, rgb.2), rgb)))
+        .as_deref()
+        .and_then(|hex| parse_hex(hex).map(|rgb| (Color::Rgb(rgb.0, rgb.1, rgb.2), rgb)))
     {
         let fg_color = contrast_color(bg_rgb);
         return ScopePalette {

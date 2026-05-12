@@ -90,7 +90,9 @@ pub fn resolve_default_download_dir(cfg: &AppConfig) -> PathBuf {
     {
         return PathBuf::from(s);
     }
-    if let Some(d) = directories::UserDirs::new().and_then(|u| u.download_dir().map(|p| p.to_path_buf())) {
+    if let Some(d) =
+        directories::UserDirs::new().and_then(|u| u.download_dir().map(|p| p.to_path_buf()))
+    {
         return d;
     }
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))

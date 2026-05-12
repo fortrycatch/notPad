@@ -35,11 +35,8 @@ impl App {
                         if !app.todo.lists.is_empty() {
                             // try to keep same selected list across refresh
                             if let Some(prev_id) = prev
-                                && let Some(idx) = app
-                                    .todo
-                                    .lists
-                                    .iter()
-                                    .position(|l| l.id == prev_id)
+                                && let Some(idx) =
+                                    app.todo.lists.iter().position(|l| l.id == prev_id)
                             {
                                 app.todo.list_cursor = idx;
                             }
@@ -108,9 +105,7 @@ impl App {
                         let new_done = if item.done == 0 { 1 } else { 0 };
                         let list_id = item.list_id.clone();
                         self.spawn(move |api| async move {
-                            let r = api
-                                .update_todo_item(&id, None, None, Some(new_done))
-                                .await;
+                            let r = api.update_todo_item(&id, None, None, Some(new_done)).await;
                             Box::new(move |app: &mut App| match r {
                                 Ok(_) => {
                                     app.fetch_todo_items(list_id);
@@ -138,9 +133,7 @@ impl App {
                                 }
                                 let lid2 = lid.clone();
                                 app.spawn(move |api| async move {
-                                    let r = api
-                                        .create_todo_item(&lid2, val.trim(), "")
-                                        .await;
+                                    let r = api.create_todo_item(&lid2, val.trim(), "").await;
                                     Box::new(move |app: &mut App| match r {
                                         Ok(_) => app.fetch_todo_items(lid2),
                                         Err(e) => app.handle_api_err("新建待办", e),

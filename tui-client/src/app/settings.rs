@@ -308,10 +308,7 @@ impl App {
             }
             // Right / l / Enter all jump focus into the content pane, mimicking
             // how the todo tab moves between lists ↔ items.
-            KeyCode::Right
-            | KeyCode::Char('l')
-            | KeyCode::Enter
-            | KeyCode::Char(' ') => {
+            KeyCode::Right | KeyCode::Char('l') | KeyCode::Enter | KeyCode::Char(' ') => {
                 self.settings.focus_right = true;
             }
             _ => {}
@@ -384,7 +381,11 @@ impl App {
                     value: current,
                     on_submit: Box::new(|app: &mut App, val: String| {
                         let trimmed = val.trim().to_string();
-                        let value = if trimmed.is_empty() { None } else { Some(trimmed) };
+                        let value = if trimmed.is_empty() {
+                            None
+                        } else {
+                            Some(trimmed)
+                        };
                         match app.config.set_download_dir(value) {
                             Ok(()) => app.set_status(
                                 if app.config.download_dir.is_some() {
@@ -456,11 +457,7 @@ impl App {
                         match r {
                             Ok(_) => {
                                 let stored = if value.is_empty() { None } else { Some(value) };
-                                if let Some(g) = app
-                                    .groups
-                                    .iter_mut()
-                                    .find(|g| g.id == group_id)
-                                {
+                                if let Some(g) = app.groups.iter_mut().find(|g| g.id == group_id) {
                                     let m = g.meta.get_or_insert_with(Default::default);
                                     m.primary_color = stored.clone();
                                 }

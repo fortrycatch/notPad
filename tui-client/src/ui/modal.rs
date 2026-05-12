@@ -213,7 +213,10 @@ fn render_download_dest(
         Some(p) => Line::from(vec![
             Span::styled("[1] ", Style::default().fg(Color::Yellow)),
             Span::raw("配置目录: "),
-            Span::styled(p.display().to_string(), Style::default().fg(Color::LightCyan)),
+            Span::styled(
+                p.display().to_string(),
+                Style::default().fg(Color::LightCyan),
+            ),
         ]),
         None => Line::from(vec![
             Span::styled("[1] ", Style::default().fg(Color::Yellow)),
@@ -299,12 +302,7 @@ fn render_download_manager(f: &mut Frame, area: Rect, tasks: &[DownloadTask], cu
     f.render_widget(Paragraph::new(hint), inner[1]);
 }
 
-fn render_download_manager_list(
-    f: &mut Frame,
-    area: Rect,
-    tasks: &[DownloadTask],
-    cursor: usize,
-) {
+fn render_download_manager_list(f: &mut Frame, area: Rect, tasks: &[DownloadTask], cursor: usize) {
     const ROWS_PER_TASK: u16 = 2;
     // Compact layout: no extra gutter row, so the manager can show more tasks.
     let visible = (area.height / ROWS_PER_TASK).max(1) as usize;
@@ -382,10 +380,16 @@ fn render_download_manager_list(
             (_, DownloadStatus::Completed) => "100%".to_string(),
             _ => "  ?%".to_string(),
         };
-        let bar = pip_bar(ratio, bar_width, matches!(t.status, DownloadStatus::Completed));
+        let bar = pip_bar(
+            ratio,
+            bar_width,
+            matches!(t.status, DownloadStatus::Completed),
+        );
         let name_room = line_rect
             .width
-            .saturating_sub((bar.len() + percent.len() + size_part.len() + speed_eta_part.len() + 8) as u16)
+            .saturating_sub(
+                (bar.len() + percent.len() + size_part.len() + speed_eta_part.len() + 8) as u16,
+            )
             .max(8) as usize;
         let name = summarize(&t.name, name_room);
         let line = format!("{name} {bar} {percent} {size_part}{speed_eta_part}");
@@ -404,10 +408,7 @@ fn render_download_manager_list(
         } else {
             Style::default()
         };
-        f.render_widget(
-            Paragraph::new(detail_line).style(detail_style),
-            row2,
-        );
+        f.render_widget(Paragraph::new(detail_line).style(detail_style), row2);
 
         y += ROWS_PER_TASK;
         if y >= area.y + area.height {
@@ -426,10 +427,14 @@ fn task_progress_meta(t: &DownloadTask) -> (String, String) {
             let speed_eta_part = match (t.total, t.speed_bps) {
                 (Some(total), s) if s > 0 && total > t.downloaded => {
                     let remaining = total - t.downloaded;
-                    format!("  {}  ETA {}", speed_fmt(t.speed_bps), human_eta_secs(remaining / s))
+                    format!(
+                        "  {}  ETA {}",
+                        speed_fmt(t.speed_bps),
+                        human_eta_secs(remaining / s)
+                    )
                 }
                 _ if t.speed_bps > 0 => format!("  {}", speed_fmt(t.speed_bps)),
-                _ => String::new()
+                _ => String::new(),
             };
             (size_part, speed_eta_part)
         }
@@ -471,7 +476,10 @@ fn pip_bar(ratio: f64, width: usize, completed: bool) -> String {
 }
 
 fn task_detail_line(t: &DownloadTask, max_width: usize) -> Line<'static> {
-    let path_text = clip_left(&t.save_path.display().to_string(), max_width.saturating_sub(2));
+    let path_text = clip_left(
+        &t.save_path.display().to_string(),
+        max_width.saturating_sub(2),
+    );
     let style = match &t.status {
         DownloadStatus::Failed(_) => Style::default().fg(Color::LightRed),
         DownloadStatus::Cancelled => Style::default().fg(Color::DarkGray),
@@ -549,7 +557,10 @@ fn render_group_picker(
                 if active { "● " } else { "  " },
                 Style::default().fg(Color::LightMagenta),
             ),
-            Span::styled(g.name.clone(), Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                g.name.clone(),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw("  "),
             Span::styled(
                 format!("[{}]", g.role),

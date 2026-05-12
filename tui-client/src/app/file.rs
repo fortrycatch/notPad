@@ -52,6 +52,7 @@ pub struct FileState {
     pub last_link: Option<String>,
     pub downloads: Vec<DownloadTask>,
     pub next_download_id: u64,
+    pub pending_upload_path: Option<PathBuf>,
 }
 
 impl App {
@@ -89,6 +90,11 @@ impl App {
     }
 
     pub(super) fn handle_file_key(&mut self, key: KeyEvent) {
+        if self.file.pending_upload_path.is_some() {
+            self.handle_upload_target_key(key);
+            return;
+        }
+
         let total = self.file.folders.len() + self.file.files.len();
         match key.code {
             KeyCode::Char('q') => self.should_quit = true,
@@ -221,8 +227,7 @@ impl App {
                 self.config.download_dir.as_deref().unwrap().trim(),
             ))
         } else {
-            directories::UserDirs::new()
-                .and_then(|u| u.download_dir().map(|p| p.to_path_buf()))
+            directories::UserDirs::new().and_then(|u| u.download_dir().map(|p| p.to_path_buf()))
         };
         let cwd_path = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         self.modal = Some(Modal::DownloadDest {
@@ -244,29 +249,9 @@ impl App {
     }
 
     pub(super) fn handle_upload_input_submit(&mut self, value: String) {
-        let Some(raw_path) = parse_upload_path_input(&value) else {
-            self.set_status("请输入文件路径，例如: C:\\Downloads\\file.zip", true);
+        let Some(canonical) = self.resolve_upload_input(value) else {
             return;
         };
-        let mut path = PathBuf::from(raw_path);
-        if path.is_relative() {
-            match std::env::current_dir() {
-                Ok(cwd) => path = cwd.join(path),
-                Err(e) => {
-                    self.set_status(format!("无法获取当前目录: {e}"), true);
-                    return;
-                }
-            }
-        }
-        if !path.exists() {
-            self.set_status(format!("文件不存在: {}", path.display()), true);
-            return;
-        }
-        if !path.is_file() {
-            self.set_status(format!("不是普通文件: {}", path.display()), true);
-            return;
-        }
-        let canonical = std::fs::canonicalize(&path).unwrap_or(path);
         let file_name = canonical
             .file_name()
             .and_then(|s| s.to_str())
@@ -287,6 +272,95 @@ impl App {
         self.modal = Some(Modal::Confirm {
             prompt,
             on_yes: Box::new(move |app: &mut App| {
+                app.start_upload_local_file(canonical.clone());
+            }),
+        });
+    }
+
+    pub(super) fn begin_startup_upload_target_selection(&mut self, value: String) {
+        let Some(path) = self.resolve_upload_input(value) else {
+            return;
+        };
+        let name = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("(unknown)")
+            .to_string();
+        self.file.pending_upload_path = Some(path);
+        self.file.current_folder = None;
+        self.fetch_drive(None);
+        self.set_status(
+            format!("选择 {name} 的上传目录：Enter 进入文件夹，Backspace 返回，u/Space 上传到当前目录，Esc 取消"),
+            false,
+        );
+    }
+
+    fn handle_upload_target_key(&mut self, key: KeyEvent) {
+        let total = self.file.folders.len() + self.file.files.len();
+        match key.code {
+            KeyCode::Esc | KeyCode::Char('q') => {
+                self.file.pending_upload_path = None;
+                self.set_status("已取消命令行上传", false);
+            }
+            KeyCode::Char('r') => self.fetch_drive(self.file.current_folder.clone()),
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.file.cursor > 0 {
+                    self.file.cursor -= 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.file.cursor + 1 < total {
+                    self.file.cursor += 1;
+                }
+            }
+            KeyCode::Backspace => {
+                if self.file.breadcrumbs.len() >= 2 {
+                    let parent = self
+                        .file
+                        .breadcrumbs
+                        .get(self.file.breadcrumbs.len() - 2)
+                        .and_then(|b| b.id.clone());
+                    self.fetch_drive(parent);
+                }
+            }
+            KeyCode::Enter => {
+                if self.file.cursor < self.file.folders.len() {
+                    let folder = self.file.folders[self.file.cursor].clone();
+                    self.fetch_drive(Some(folder.id));
+                }
+            }
+            KeyCode::Char('u') | KeyCode::Char(' ') => {
+                self.confirm_pending_upload_to_current_folder()
+            }
+            _ => {}
+        }
+    }
+
+    fn confirm_pending_upload_to_current_folder(&mut self) {
+        let Some(canonical) = self.file.pending_upload_path.clone() else {
+            return;
+        };
+        let file_name = canonical
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("(unknown)")
+            .to_string();
+        let file_size = std::fs::metadata(&canonical).map(|m| m.len()).unwrap_or(0);
+        let target_folder = self
+            .file
+            .breadcrumbs
+            .last()
+            .map(|b| b.name.clone())
+            .unwrap_or_else(|| "根目录".to_string());
+        let prompt = format!(
+            "确认上传到当前目录?\n\n文件: {file_name}\n路径: {}\n大小: {}\n目标目录: {target_folder}",
+            canonical.display(),
+            human_bytes(file_size)
+        );
+        self.modal = Some(Modal::Confirm {
+            prompt,
+            on_yes: Box::new(move |app: &mut App| {
+                app.file.pending_upload_path = None;
                 app.start_upload_local_file(canonical.clone());
             }),
         });
@@ -382,8 +456,8 @@ impl App {
         let http = self.api.http_client();
         let display_name = file.name.clone();
         tokio::spawn(async move {
-            let res = stream_download(&http, &url, &save_path, id, cancel.clone(), tx.clone())
-                .await;
+            let res =
+                stream_download(&http, &url, &save_path, id, cancel.clone(), tx.clone()).await;
             let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
                 // Resolve the final status + which user-facing message to
                 // surface up-front, so the per-task mutable borrow stays
@@ -424,7 +498,36 @@ impl App {
             })));
         });
     }
+}
 
+fn resolve_upload_input_path(input: &str) -> anyhow::Result<PathBuf> {
+    let Some(raw_path) = parse_upload_path_input(input) else {
+        anyhow::bail!("请输入文件路径，例如: C:\\Downloads\\file.zip");
+    };
+    let mut path = PathBuf::from(raw_path);
+    if path.is_relative() {
+        let cwd = std::env::current_dir().map_err(|e| anyhow::anyhow!("无法获取当前目录: {e}"))?;
+        path = cwd.join(path);
+    }
+    if !path.exists() {
+        anyhow::bail!("文件不存在: {}", path.display());
+    }
+    if !path.is_file() {
+        anyhow::bail!("不是普通文件: {}", path.display());
+    }
+    Ok(std::fs::canonicalize(&path).unwrap_or(path))
+}
+
+impl App {
+    fn resolve_upload_input(&mut self, value: String) -> Option<PathBuf> {
+        match resolve_upload_input_path(&value) {
+            Ok(path) => Some(path),
+            Err(e) => {
+                self.set_status(e.to_string(), true);
+                None
+            }
+        }
+    }
 }
 
 fn parse_upload_path_input(input: &str) -> Option<String> {
@@ -442,7 +545,11 @@ fn parse_upload_path_input(input: &str) -> Option<String> {
     let unquoted = path_part
         .strip_prefix('"')
         .and_then(|x| x.strip_suffix('"'))
-        .or_else(|| path_part.strip_prefix('\'').and_then(|x| x.strip_suffix('\'')))
+        .or_else(|| {
+            path_part
+                .strip_prefix('\'')
+                .and_then(|x| x.strip_suffix('\''))
+        })
         .unwrap_or(path_part)
         .trim();
     if unquoted.is_empty() {
@@ -570,13 +677,7 @@ async fn stream_download(
 
     tokio::fs::rename(&part_path, save_path)
         .await
-        .with_context(|| {
-            format!(
-                "rename {} -> {}",
-                part_path.display(),
-                save_path.display()
-            )
-        })?;
+        .with_context(|| format!("rename {} -> {}", part_path.display(), save_path.display()))?;
 
     let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
         if let Some(t) = app.file.downloads.iter_mut().find(|t| t.id == id) {

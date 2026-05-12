@@ -287,9 +287,7 @@ impl App {
                             KeyCode::Backspace => {
                                 title.pop();
                             }
-                            KeyCode::Char(c)
-                                if !key.modifiers.contains(KeyModifiers::CONTROL) =>
-                            {
+                            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                                 title.push(c);
                             }
                             KeyCode::Enter => {

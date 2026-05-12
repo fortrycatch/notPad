@@ -11,9 +11,7 @@ pub fn spawn_input_loop(tx: mpsc::UnboundedSender<Msg>) {
         let mut stream = EventStream::new();
         loop {
             match stream.next().await {
-                Some(Ok(CtEvent::Key(KeyEvent { kind, .. })))
-                    if kind != KeyEventKind::Press =>
-                {
+                Some(Ok(CtEvent::Key(KeyEvent { kind, .. }))) if kind != KeyEventKind::Press => {
                     continue;
                 }
                 Some(Ok(CtEvent::Key(key))) => {

@@ -178,7 +178,9 @@ fn render_detail(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(
         Paragraph::new(Line::from(vec![Span::styled(
             "描述",
-            Style::default().fg(Color::Gray).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Gray)
+                .add_modifier(Modifier::BOLD),
         )])),
         inner[4],
     );
@@ -192,13 +194,17 @@ fn render_detail(f: &mut Frame, app: &App, area: Rect) {
     } else {
         Style::default()
     };
-    let desc = Paragraph::new(desc_text).style(desc_style).wrap(Wrap { trim: false });
+    let desc = Paragraph::new(desc_text)
+        .style(desc_style)
+        .wrap(Wrap { trim: false });
     f.render_widget(desc, inner[5]);
 
     f.render_widget(
         Paragraph::new(Line::from(vec![Span::styled(
             format!("引用 ({})", item.refs.len()),
-            Style::default().fg(Color::Gray).add_modifier(Modifier::BOLD),
+            Style::default()
+                .fg(Color::Gray)
+                .add_modifier(Modifier::BOLD),
         )])),
         inner[6],
     );

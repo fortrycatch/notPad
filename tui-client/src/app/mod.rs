@@ -257,7 +257,7 @@ impl App {
         self.refresh_current_tab();
         if let Some(path) = self.startup_upload_path.take() {
             self.tab = Tab::File;
-            self.handle_upload_input_submit(path);
+            self.begin_startup_upload_target_selection(path);
         }
     }
 
@@ -434,6 +434,7 @@ impl App {
         if key.code == KeyCode::Char('d')
             && key.modifiers.contains(KeyModifiers::CONTROL)
             && !matches!(self.notes.detail, Some(NoteDetail::Edit { .. }))
+            && self.file.pending_upload_path.is_none()
         {
             self.modal = Some(Modal::DownloadManager { cursor: 0 });
             return;
@@ -442,6 +443,7 @@ impl App {
         if key.code == KeyCode::Char('g')
             && key.modifiers.is_empty()
             && !matches!(self.notes.detail, Some(NoteDetail::Edit { .. }))
+            && self.file.pending_upload_path.is_none()
         {
             self.open_group_picker();
             return;
@@ -450,7 +452,8 @@ impl App {
         // text inputs that need to receive raw digits (note detail + custom
         // color hex field on the settings tab).
         let in_text_input = self.notes.detail.is_some()
-            || (self.tab == Tab::Settings && self.settings.editing_custom);
+            || (self.tab == Tab::Settings && self.settings.editing_custom)
+            || self.file.pending_upload_path.is_some();
         if let KeyCode::Char(c) = key.code
             && key.modifiers.is_empty()
             && !in_text_input
@@ -550,9 +553,7 @@ impl App {
                                             // Bind new tag to note immediately
                                             let nid2 = nid.clone();
                                             app.spawn(move |api| async move {
-                                                let _ = api
-                                                    .add_tag_to_note(&nid2, tid)
-                                                    .await;
+                                                let _ = api.add_tag_to_note(&nid2, tid).await;
                                                 Box::new(|_app: &mut App| {})
                                             });
                                         }
@@ -566,9 +567,7 @@ impl App {
                         KeyCode::Backspace => {
                             new_input.pop();
                         }
-                        KeyCode::Char(c)
-                            if !key.modifiers.contains(KeyModifiers::CONTROL) =>
-                        {
+                        KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
                             new_input.push(c);
                         }
                         _ => {}
@@ -654,16 +653,18 @@ impl App {
             }) => match key.code {
                 KeyCode::Esc | KeyCode::Char('q') => {}
                 KeyCode::Char('1') | KeyCode::Enter => {
-                    let dir = cfg_path.unwrap_or_else(|| {
-                        crate::util::resolve_default_download_dir(&self.config)
-                    });
+                    let dir = cfg_path
+                        .unwrap_or_else(|| crate::util::resolve_default_download_dir(&self.config));
                     self.start_download(file, dir);
                 }
                 KeyCode::Char('2') => {
                     self.start_download(file, cwd_path);
                 }
                 KeyCode::Char('3') => {
-                    let url = file.public_url.clone().unwrap_or_else(|| file.oss_key.clone());
+                    let url = file
+                        .public_url
+                        .clone()
+                        .unwrap_or_else(|| file.oss_key.clone());
                     self.file.last_link = Some(url.clone());
                     match crate::util::copy_to_clipboard(&url) {
                         Ok(()) => self.set_status("已复制链接到剪贴板", false),
@@ -740,7 +741,11 @@ impl App {
     }
 }
 
-pub async fn run(api: ApiClient, config: AppConfig, startup_upload_path: Option<String>) -> Result<()> {
+pub async fn run(
+    api: ApiClient,
+    config: AppConfig,
+    startup_upload_path: Option<String>,
+) -> Result<()> {
     use std::io;
     use std::time::Duration;
 

@@ -206,14 +206,11 @@ where
             if s.is_empty() {
                 return Ok(vec![]);
             }
-            let parsed: serde_json::Value =
-                serde_json::from_str(&s).map_err(D::Error::custom)?;
+            let parsed: serde_json::Value = serde_json::from_str(&s).map_err(D::Error::custom)?;
             match parsed {
                 serde_json::Value::Array(arr) => arr
                     .into_iter()
-                    .map(|item| {
-                        serde_json::from_value::<TodoRef>(item).map_err(D::Error::custom)
-                    })
+                    .map(|item| serde_json::from_value::<TodoRef>(item).map_err(D::Error::custom))
                     .collect(),
                 _ => Ok(vec![]),
             }

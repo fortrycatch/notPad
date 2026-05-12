@@ -27,7 +27,12 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
     }
 }
 
-fn render_view(f: &mut Frame, area: Rect, note: &crate::api::dto::Note, tags: &[crate::api::dto::NoteTag]) {
+fn render_view(
+    f: &mut Frame,
+    area: Rect,
+    note: &crate::api::dto::Note,
+    tags: &[crate::api::dto::NoteTag],
+) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(4), Constraint::Min(0)])
@@ -35,17 +40,26 @@ fn render_view(f: &mut Frame, area: Rect, note: &crate::api::dto::Note, tags: &[
 
     let mut head_lines: Vec<Line> = vec![Line::from(vec![Span::styled(
         note.title.clone(),
-        Style::default().add_modifier(Modifier::BOLD).fg(Color::White),
+        Style::default()
+            .add_modifier(Modifier::BOLD)
+            .fg(Color::White),
     )])];
     head_lines.push(Line::from(vec![
         Span::styled(
-            format!("更新于 {}", &note.updated_at[..note.updated_at.len().min(19)]),
+            format!(
+                "更新于 {}",
+                &note.updated_at[..note.updated_at.len().min(19)]
+            ),
             Style::default().fg(Color::DarkGray),
         ),
         Span::raw("   "),
-        Span::styled(format!("ID {}", note.id), Style::default().fg(Color::DarkGray)),
+        Span::styled(
+            format!("ID {}", note.id),
+            Style::default().fg(Color::DarkGray),
+        ),
     ]));
-    let mut tag_spans: Vec<Span> = vec![Span::styled("标签: ", Style::default().fg(Color::DarkGray))];
+    let mut tag_spans: Vec<Span> =
+        vec![Span::styled("标签: ", Style::default().fg(Color::DarkGray))];
     if tags.is_empty() {
         tag_spans.push(Span::styled("(无)", Style::default().fg(Color::DarkGray)));
     } else {

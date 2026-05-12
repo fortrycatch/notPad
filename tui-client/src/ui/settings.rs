@@ -31,18 +31,9 @@ fn render_sections(f: &mut Frame, app: &App, area: Rect) {
         .iter()
         .map(|s| {
             let (glyph, glyph_style) = match s {
-                SettingsSection::Theme => (
-                    " ● ",
-                    Style::default().fg(Color::LightMagenta),
-                ),
-                SettingsSection::Download => (
-                    " ● ",
-                    Style::default().fg(Color::LightCyan),
-                ),
-                SettingsSection::Account => (
-                    " ● ",
-                    Style::default().fg(Color::LightYellow),
-                ),
+                SettingsSection::Theme => (" ● ", Style::default().fg(Color::LightMagenta)),
+                SettingsSection::Download => (" ● ", Style::default().fg(Color::LightCyan)),
+                SettingsSection::Account => (" ● ", Style::default().fg(Color::LightYellow)),
             };
             ListItem::new(Line::from(vec![
                 Span::styled(glyph, glyph_style),
@@ -113,7 +104,9 @@ fn render_download_pane(f: &mut Frame, app: &App, area: Rect) {
             match configured {
                 Some(p) => Span::styled(
                     p.to_string(),
-                    Style::default().add_modifier(Modifier::BOLD).fg(Color::White),
+                    Style::default()
+                        .add_modifier(Modifier::BOLD)
+                        .fg(Color::White),
                 ),
                 None => Span::styled(
                     "(未配置，按 Enter 编辑)",
@@ -298,10 +291,7 @@ fn render_theme_actions(f: &mut Frame, app: &App, area: Rect) {
     // Reset row.
     items.push(ListItem::new(Line::from(vec![
         Span::raw("   "),
-        Span::styled(
-            "↺ 恢复默认主题色",
-            Style::default().fg(Color::LightYellow),
-        ),
+        Span::styled("↺ 恢复默认主题色", Style::default().fg(Color::LightYellow)),
     ])));
 
     let mut state = ListState::default();
@@ -429,10 +419,7 @@ fn account_logout_line(selected: bool) -> Line<'static> {
         .fg(Color::LightRed)
         .add_modifier(Modifier::BOLD);
     let st = account_row_style(selected, base);
-    Line::from(vec![
-        Span::styled(sym, st),
-        Span::styled("⏻ 退出登录", st),
-    ])
+    Line::from(vec![Span::styled(sym, st), Span::styled("⏻ 退出登录", st)])
 }
 
 /// 用量卡片：统计数字 + 单独一行的「重新统计」（光标索引 0）。
@@ -478,10 +465,7 @@ fn render_usage_card(f: &mut Frame, app: &App, area: Rect) {
         "↻ 重新统计用量"
     };
     let rec_line = Line::from(vec![
-        Span::styled(
-            if sel { "» " } else { "  " },
-            rec_st,
-        ),
+        Span::styled(if sel { "» " } else { "  " }, rec_st),
         Span::styled(rec_label, rec_st),
         Span::styled("  Enter", Style::default().fg(Color::DarkGray)),
     ]);
@@ -558,7 +542,9 @@ fn render_devices_card(f: &mut Frame, app: &App, area: Rect) {
 
         let st0 = account_row_style(
             sel,
-            Style::default().add_modifier(Modifier::BOLD).fg(Color::White),
+            Style::default()
+                .add_modifier(Modifier::BOLD)
+                .fg(Color::White),
         );
         let st1 = account_row_style(sel, Style::default().fg(Color::DarkGray));
         lines.push(Line::from(vec![
@@ -623,10 +609,7 @@ fn device_kind_label(ua: Option<&str>) -> &'static str {
 }
 
 fn regex_like_tablet(s: &str) -> bool {
-    if s.contains("ipad")
-        || s.contains("tablet")
-        || s.contains("playbook")
-        || s.contains("kindle")
+    if s.contains("ipad") || s.contains("tablet") || s.contains("playbook") || s.contains("kindle")
     {
         return true;
     }
@@ -650,7 +633,10 @@ fn regex_like_phone(s: &str) -> bool {
 
 fn short_datetime(s: &str) -> String {
     if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
-        return dt.with_timezone(&chrono::Local).format("%Y-%m-%d %H:%M").to_string();
+        return dt
+            .with_timezone(&chrono::Local)
+            .format("%Y-%m-%d %H:%M")
+            .to_string();
     }
     if let Ok(nd) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S") {
         return nd.format("%Y-%m-%d %H:%M").to_string();

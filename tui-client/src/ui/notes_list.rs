@@ -62,7 +62,10 @@ fn render_notes(f: &mut Frame, app: &App, area: Rect) {
             ListItem::new(Line::from(vec![
                 Span::styled(date, Style::default().fg(Color::DarkGray)),
                 Span::raw("  "),
-                Span::styled(n.title.clone(), Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    n.title.clone(),
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
                 Span::raw("  "),
                 Span::styled(preview, Style::default().fg(Color::Gray)),
             ]))

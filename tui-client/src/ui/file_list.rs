@@ -59,17 +59,33 @@ fn render_breadcrumbs(f: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_listing(f: &mut Frame, app: &App, area: Rect) {
-    let title = format!(
-        " 网盘 ({} 文件夹 / {} 文件) ",
-        app.file.folders.len(),
-        app.file.files.len()
-    );
+    let title = if let Some(path) = &app.file.pending_upload_path {
+        let name = path
+            .file_name()
+            .and_then(|s| s.to_str())
+            .unwrap_or("(unknown)");
+        format!(
+            " 选择上传目录: {}  ({} 文件夹 / {} 文件) ",
+            name,
+            app.file.folders.len(),
+            app.file.files.len()
+        )
+    } else {
+        format!(
+            " 网盘 ({} 文件夹 / {} 文件) ",
+            app.file.folders.len(),
+            app.file.files.len()
+        )
+    };
     let block = Block::default().borders(Borders::ALL).title(title);
     let mut items: Vec<ListItem> = vec![];
     for f in &app.file.folders {
         items.push(ListItem::new(Line::from(vec![
             Span::styled("📁 ", Style::default().fg(Color::LightYellow)),
-            Span::styled(f.name.clone(), Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                f.name.clone(),
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw("/"),
         ])));
     }
@@ -108,10 +124,7 @@ fn render_listing(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_downloads_dashboard(f: &mut Frame, app: &App, area: Rect, active_count: usize) {
     let total = app.file.downloads.len();
-    let title = format!(
-        " 下载中 {}/{}  Ctrl+D 打开管理器 ",
-        active_count, total
-    );
+    let title = format!(" 下载中 {}/{}  Ctrl+D 打开管理器 ", active_count, total);
     let block = Block::default().borders(Borders::ALL).title(title);
     let inner = block.inner(area);
     f.render_widget(block, area);

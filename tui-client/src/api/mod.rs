@@ -24,11 +24,7 @@ struct Inner {
 }
 
 impl ApiClient {
-    pub fn new(
-        base_url: String,
-        token: Option<String>,
-        group_id: Option<String>,
-    ) -> Result<Self> {
+    pub fn new(base_url: String, token: Option<String>, group_id: Option<String>) -> Result<Self> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
@@ -238,7 +234,8 @@ impl ApiClient {
     }
 
     pub async fn list_note_tags(&self) -> Result<Vec<NoteTag>> {
-        self.query_no_input::<Vec<NoteTag>>("notepad.listTags").await
+        self.query_no_input::<Vec<NoteTag>>("notepad.listTags")
+            .await
     }
 
     pub async fn create_note_tag(&self, name: &str) -> Result<NoteTag> {
@@ -427,8 +424,11 @@ impl ApiClient {
             content_type: content_type.to_string(),
             folder_id,
         };
-        self.query::<DriveGetUploadUrlInput, DriveUploadUrlResp>("file_drive.getUploadUrl", Some(&input))
-            .await
+        self.query::<DriveGetUploadUrlInput, DriveUploadUrlResp>(
+            "file_drive.getUploadUrl",
+            Some(&input),
+        )
+        .await
     }
 
     pub async fn drive_add_file(
@@ -462,7 +462,8 @@ impl ApiClient {
 
     // auth sessions
     pub async fn get_tokens(&self) -> Result<Vec<AuthTokenRow>> {
-        self.query_no_input::<Vec<AuthTokenRow>>("auth.getTokens").await
+        self.query_no_input::<Vec<AuthTokenRow>>("auth.getTokens")
+            .await
     }
 
     pub async fn set_token_alias(

@@ -34,7 +34,10 @@ pub fn render(f: &mut Frame, app: &App, area: Rect) {
                 Span::raw(" "),
                 Span::styled(when, Style::default().fg(Color::DarkGray)),
                 Span::raw("  "),
-                Span::styled(it.name.clone(), Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled(
+                    it.name.clone(),
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
                 Span::styled(summary, Style::default().fg(Color::Gray)),
             ]))
         })

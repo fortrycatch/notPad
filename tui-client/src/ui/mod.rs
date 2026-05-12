@@ -46,7 +46,10 @@ fn render_top_bar(f: &mut Frame, app: &App, area: Rect) {
         .iter()
         .map(|t| {
             Line::from(vec![
-                Span::styled(format!("{}", t.shortcut()), Style::default().fg(Color::Yellow)),
+                Span::styled(
+                    format!("{}", t.shortcut()),
+                    Style::default().fg(Color::Yellow),
+                ),
                 Span::raw(" "),
                 Span::raw(t.label()),
             ])
@@ -117,20 +120,19 @@ fn render_main_body(f: &mut Frame, app: &App, area: Rect) {
 
 fn render_bottom_bar(f: &mut Frame, app: &App, area: Rect) {
     let hint = match (app.tab, app.notes.detail.is_some()) {
-        (Tab::Timeline, _) => {
-            "1-6 切换  g 群组  j/k 上下  r 刷新  Ctrl+D 下载管理器  Ctrl+C 退出"
-        }
+        (Tab::Timeline, _) => "1-6 切换  g 群组  j/k 上下  r 刷新  Ctrl+D 下载管理器  Ctrl+C 退出",
         (Tab::Notes, false) => {
             "1-6 切换  g 群组  j/k  Enter 查看  n 新建  d 删除  t 标签  r 刷新  Ctrl+D 下载管理器  q 退出"
         }
-        (Tab::Notes, true) => {
-            "Esc/q 返回  e 编辑  t 标签  Tab 切焦点(标题/正文)  Ctrl+S 保存"
-        }
+        (Tab::Notes, true) => "Esc/q 返回  e 编辑  t 标签  Tab 切焦点(标题/正文)  Ctrl+S 保存",
         (Tab::Todo, _) => {
             "1-6 切换  g 群组  Tab 切焦点  j/k  Enter 切换完成/进入  n 新建  e 改名  d 删除  r 刷新  Ctrl+D 下载管理器"
         }
         (Tab::Image, _) => {
             "1-6 切换  g 群组  j/k  / 搜索  e 重命名  y 显示URL  r 刷新  Ctrl+D 下载管理器"
+        }
+        (Tab::File, _) if app.file.pending_upload_path.is_some() => {
+            "选择上传目录: j/k 移动  Enter 进入文件夹  Backspace 上级  u/Space 上传到当前目录  Esc 取消"
         }
         (Tab::File, _) => {
             "1-6 切换  g 群组  j/k  Enter 进入/下载菜单  Backspace 上级  u 上传  e 重命名  y 显示链接  r 刷新  Ctrl+D 下载管理器"
@@ -165,7 +167,10 @@ fn render_bottom_bar(f: &mut Frame, app: &App, area: Rect) {
     );
     let body_span = Span::styled(
         format!(" {body} "),
-        Style::default().fg(body_fg).bg(body_bg).add_modifier(body_mod),
+        Style::default()
+            .fg(body_fg)
+            .bg(body_bg)
+            .add_modifier(body_mod),
     );
     let line = Line::from(vec![chip, body_span]);
 
@@ -278,11 +283,7 @@ fn contrast_color((r, g, b): (u8, u8, u8)) -> Color {
         }
     }
     let l = 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
-    if l > 0.5 {
-        Color::Black
-    } else {
-        Color::White
-    }
+    if l > 0.5 { Color::Black } else { Color::White }
 }
 
 fn spinner_glyph(phase: u8) -> &'static str {

@@ -72,8 +72,7 @@ impl App {
                         app.after_login();
                     }
                     Ok(r) => {
-                        app.login.error =
-                            Some(r.message.unwrap_or_else(|| "登录失败".into()));
+                        app.login.error = Some(r.message.unwrap_or_else(|| "登录失败".into()));
                     }
                     Err(e) => {
                         app.login.error = Some(format!("网络错误: {e}"));

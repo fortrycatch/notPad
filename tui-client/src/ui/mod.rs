@@ -16,7 +16,7 @@ use ratatui::widgets::{Block, Borders, Paragraph, Tabs};
 
 use crate::app::{App, Tab};
 
-pub fn render(f: &mut Frame, app: &App) {
+pub fn render(f: &mut Frame, app: &mut App) {
     if !app.authenticated {
         login::render(f, app);
         if app.modal.is_some() {
@@ -93,7 +93,7 @@ fn render_top_bar(f: &mut Frame, app: &App, area: Rect) {
     f.render_widget(tabs, area);
 }
 
-fn render_main_body(f: &mut Frame, app: &App, area: Rect) {
+fn render_main_body(f: &mut Frame, app: &mut App, area: Rect) {
     match app.tab {
         Tab::Timeline => timeline::render(f, app, area),
         Tab::Notes => {

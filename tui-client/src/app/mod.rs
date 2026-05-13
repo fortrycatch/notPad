@@ -1,5 +1,7 @@
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui_image::picker::Picker;
+use ratatui_image::thread::{ResizeRequest, ResizeResponse};
 use tokio::sync::mpsc;
 
 use crate::api::ApiClient;
@@ -14,9 +16,7 @@ pub mod settings;
 pub mod timeline;
 pub mod todo;
 
-pub use file::{
-    DownloadStatus, DownloadTask, FileState, TransferRef, UploadStatus, UploadTask,
-};
+pub use file::{DownloadStatus, DownloadTask, FileState, TransferRef, UploadStatus, UploadTask};
 pub use image::ImageState;
 pub use login::LoginState;
 pub use notes::{NoteDetail, NotesState};
@@ -31,6 +31,7 @@ pub enum Msg {
     Tick,
     Resize(#[allow(dead_code)] u16, #[allow(dead_code)] u16),
     Apply(Apply),
+    ImagePreviewResized(std::result::Result<ResizeResponse, String>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -122,6 +123,8 @@ pub struct App {
     pub api: ApiClient,
     pub config: AppConfig,
     pub tx: mpsc::UnboundedSender<Msg>,
+    pub image_picker: Picker,
+    pub image_resize_tx: mpsc::UnboundedSender<ResizeRequest>,
 
     pub authenticated: bool,
     pub auth_checking: bool,
@@ -157,6 +160,8 @@ impl App {
         api: ApiClient,
         config: AppConfig,
         tx: mpsc::UnboundedSender<Msg>,
+        image_picker: Picker,
+        image_resize_tx: mpsc::UnboundedSender<ResizeRequest>,
         startup_upload_path: Option<String>,
     ) -> Self {
         let active_group_id = config.active_group_id.clone();
@@ -164,6 +169,8 @@ impl App {
             api,
             config,
             tx,
+            image_picker,
+            image_resize_tx,
             authenticated: false,
             auth_checking: false,
             username: None,
@@ -402,6 +409,7 @@ impl App {
     pub fn update(&mut self, msg: Msg) {
         match msg {
             Msg::Apply(f) => f(self),
+            Msg::ImagePreviewResized(res) => self.handle_image_preview_resized(res),
             Msg::Tick => self.on_tick(),
             Msg::Resize(_, _) => {}
             Msg::Key(key) => self.on_key(key),
@@ -757,19 +765,40 @@ pub async fn run(
     let mut terminal = Terminal::new(backend)?;
 
     let (tx, mut rx) = mpsc::unbounded_channel::<Msg>();
+    let (image_resize_tx, mut image_resize_rx) = mpsc::unbounded_channel::<ResizeRequest>();
+    let image_picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
     crate::event::spawn_input_loop(tx.clone());
     crate::event::spawn_tick_loop(tx.clone(), Duration::from_millis(100));
 
-    let mut app = App::new(api, config, tx, startup_upload_path);
+    let mut app = App::new(
+        api,
+        config,
+        tx.clone(),
+        image_picker,
+        image_resize_tx,
+        startup_upload_path,
+    );
     app.boot();
 
     let result: Result<()> = loop {
-        if let Err(e) = terminal.draw(|f| crate::ui::render(f, &app)) {
+        if let Err(e) = terminal.draw(|f| crate::ui::render(f, &mut app)) {
             break Err(e.into());
         }
-        match rx.recv().await {
-            Some(msg) => app.update(msg),
-            None => break Ok(()),
+        tokio::select! {
+            Some(msg) = rx.recv() => app.update(msg),
+            Some(request) = image_resize_rx.recv() => {
+                let tx = tx.clone();
+                tokio::spawn(async move {
+                    let res = tokio::task::spawn_blocking(move || {
+                        request.resize_encode().map_err(|e| e.to_string())
+                    })
+                    .await
+                    .map_err(|e| e.to_string())
+                    .and_then(|x| x);
+                    let _ = tx.send(Msg::ImagePreviewResized(res));
+                });
+            }
+            else => break Ok(()),
         }
         if app.should_quit {
             break Ok(());

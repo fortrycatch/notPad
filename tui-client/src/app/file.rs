@@ -484,7 +484,7 @@ impl App {
                     .drive_get_upload_url(&file_name, &mime_type, folder_id.clone())
                     .await?;
                 stream_upload(
-                    &api.http_client(),
+                    &api.transfer_http_client(),
                     &upload.url,
                     &local_path,
                     file_size,
@@ -569,7 +569,7 @@ impl App {
         });
 
         let tx = self.tx.clone();
-        let http = self.api.http_client();
+        let http = self.api.transfer_http_client();
         let display_name = file.name.clone();
         tokio::spawn(async move {
             let res =
@@ -902,23 +902,19 @@ async fn stream_upload(
                         let now = Instant::now();
                         if now.duration_since(last_emit) >= throttle {
                             let delta_bytes = uploaded - last_emit_bytes;
-                            let delta_secs =
-                                now.duration_since(last_emit).as_secs_f64().max(0.001);
+                            let delta_secs = now.duration_since(last_emit).as_secs_f64().max(0.001);
                             let instant_bps = (delta_bytes as f64 / delta_secs) as u64;
                             last_emit = now;
                             last_emit_bytes = uploaded;
                             let _ = tx.send(Msg::Apply(Box::new(move |app: &mut App| {
-                                if let Some(t) =
-                                    app.file.uploads.iter_mut().find(|t| t.id == id)
-                                {
+                                if let Some(t) = app.file.uploads.iter_mut().find(|t| t.id == id) {
                                     t.uploaded = uploaded;
                                     // Match the download EMA so the gauge
                                     // jitter feels the same in both panes.
                                     t.speed_bps = if t.speed_bps == 0 {
                                         instant_bps
                                     } else {
-                                        ((t.speed_bps as f64) * 0.7
-                                            + (instant_bps as f64) * 0.3)
+                                        ((t.speed_bps as f64) * 0.7 + (instant_bps as f64) * 0.3)
                                             as u64
                                     };
                                 }

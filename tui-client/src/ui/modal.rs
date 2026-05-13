@@ -270,7 +270,7 @@ fn render_download_dest(
 struct TransferRow {
     name: String,
     detail_path: std::path::PathBuf,
-    direction: char,   // ↑ upload, ↓ download
+    direction: char, // ↑ upload, ↓ download
     total: Option<u64>,
     transferred: u64,
     speed_bps: u64,
@@ -383,13 +383,7 @@ fn render_transfer_manager(f: &mut Frame, app: &App, area: Rect, cursor: usize) 
     f.render_widget(Paragraph::new(hint), inner[1]);
 }
 
-fn render_transfer_list(
-    f: &mut Frame,
-    app: &App,
-    area: Rect,
-    rows: &[TransferRow],
-    cursor: usize,
-) {
+fn render_transfer_list(f: &mut Frame, app: &App, area: Rect, rows: &[TransferRow], cursor: usize) {
     const ROWS_PER_TASK: u16 = 2;
     // Compact layout: no extra gutter row, so the manager can show more tasks.
     let visible = (area.height / ROWS_PER_TASK).max(1) as usize;
@@ -424,9 +418,7 @@ fn render_transfer_list(
         };
 
         let ratio = match (t.total, &t.state) {
-            (Some(total), _) if total > 0 => {
-                (t.transferred as f64 / total as f64).clamp(0.0, 1.0)
-            }
+            (Some(total), _) if total > 0 => (t.transferred as f64 / total as f64).clamp(0.0, 1.0),
             (_, TransferState::Completed) => 1.0,
             _ => 0.0,
         };

@@ -18,6 +18,7 @@ pub struct ApiClient {
 
 struct Inner {
     http: reqwest::Client,
+    transfer_http: reqwest::Client,
     base_url: RwLock<String>,
     token: RwLock<Option<String>>,
     group_id: RwLock<Option<String>>,
@@ -29,9 +30,14 @@ impl ApiClient {
             .timeout(Duration::from_secs(30))
             .build()
             .context("build http client")?;
+        let transfer_http = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(30))
+            .build()
+            .context("build transfer http client")?;
         Ok(Self {
             inner: Arc::new(Inner {
                 http,
+                transfer_http,
                 base_url: RwLock::new(base_url),
                 token: RwLock::new(token),
                 group_id: RwLock::new(group_id),
@@ -63,11 +69,17 @@ impl ApiClient {
         self.inner.group_id.read().unwrap().clone()
     }
 
-    /// Shared HTTP client for ad-hoc operations (e.g. file downloads) that
-    /// don't go through the tRPC envelope. Keeps connection pooling but
-    /// callers can override per-request timeout.
+    /// Shared HTTP client for normal tRPC calls. It has a whole-request
+    /// timeout so API requests don't hang forever.
     pub fn http_client(&self) -> reqwest::Client {
         self.inner.http.clone()
+    }
+
+    /// Shared HTTP client for large object transfers. It intentionally has
+    /// no whole-request timeout: uploads/downloads can legitimately take
+    /// minutes while still making progress.
+    pub fn transfer_http_client(&self) -> reqwest::Client {
+        self.inner.transfer_http.clone()
     }
 
     fn endpoint(&self, path: &str) -> String {

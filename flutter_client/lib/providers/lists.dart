@@ -345,8 +345,9 @@ final driveProvider =
   DriveController.new,
 );
 
-final groupsProvider = FutureProvider.autoDispose<List<Group>>((ref) {
-  ref.watch(sessionProvider.select((s) => s.token));
+final groupsProvider = FutureProvider<List<Group>>((ref) {
+  final token = ref.watch(sessionProvider.select((s) => s.token));
+  if (token == null || token.isEmpty) return <Group>[];
   return ref.read(apiProvider).group.list();
 });
 

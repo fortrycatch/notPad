@@ -63,37 +63,46 @@ class AppDrawer extends ConsumerWidget {
               onTap: () => _go(context, '/settings/profile'),
             ),
             const Divider(),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
-              child: Text('空间'),
-            ),
-            ListTile(
+            ExpansionTile(
               leading: Icon(
-                session.groupId == null ? Icons.person : Icons.person_outline,
+                session.groupId == null ? Icons.person_outline : Icons.workspaces_outlined,
               ),
-              title: const Text('个人空间'),
-              selected: session.groupId == null,
-              onTap: () => _switchSpace(context, ref),
-            ),
-            for (final group in groups)
-              ListTile(
-                leading: Icon(
-                  session.groupId == group.id ? Icons.workspaces : Icons.workspaces_outlined,
-                ),
-                title: Text(group.name),
-                subtitle: Text(roleLabel(group.role)),
-                selected: session.groupId == group.id,
-                onTap: () => _switchSpace(
-                  context,
-                  ref,
-                  groupId: group.id,
-                  role: group.role,
-                ),
+              title: Text(currentGroup?.name ?? '个人空间'),
+              subtitle: Text(
+                currentGroup == null ? '当前空间' : roleLabel(currentGroup.role),
               ),
-            ListTile(
-              leading: const Icon(Icons.group_outlined),
-              title: const Text('管理群组'),
-              onTap: () => _go(context, '/groups'),
+              children: [
+                ListTile(
+                  leading: Icon(
+                    session.groupId == null ? Icons.person : Icons.person_outline,
+                  ),
+                  title: const Text('个人空间'),
+                  selected: session.groupId == null,
+                  onTap: () => _switchSpace(context, ref),
+                ),
+                for (final group in groups)
+                  ListTile(
+                    leading: Icon(
+                      session.groupId == group.id
+                          ? Icons.workspaces
+                          : Icons.workspaces_outlined,
+                    ),
+                    title: Text(group.name),
+                    subtitle: Text(roleLabel(group.role)),
+                    selected: session.groupId == group.id,
+                    onTap: () => _switchSpace(
+                      context,
+                      ref,
+                      groupId: group.id,
+                      role: group.role,
+                    ),
+                  ),
+                ListTile(
+                  leading: const Icon(Icons.group_outlined),
+                  title: const Text('管理群组'),
+                  onTap: () => _go(context, '/groups'),
+                ),
+              ],
             ),
             const Divider(),
             ListTile(
@@ -132,14 +141,6 @@ class AppDrawer extends ConsumerWidget {
               title: const Text('设置'),
               onTap: () => _go(context, '/settings'),
             ),
-            if (currentGroup != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text(
-                  '当前：${currentGroup.name}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
           ],
         ),
       ),

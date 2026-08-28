@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'providers/theme.dart';
 import 'router/app_router.dart';
 
 class NotepadApp extends ConsumerWidget {
@@ -9,7 +10,7 @@ class NotepadApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
-    const seed = Color(0xFF6750A4);
+    final seed = ref.watch(themeColorProvider);
     return MaterialApp.router(
       title: '笔记',
       theme: ThemeData(

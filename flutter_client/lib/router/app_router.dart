@@ -22,6 +22,7 @@ import '../features/notes/note_tags_page.dart';
 import '../features/notes/notes_page.dart';
 import '../features/pickers/resource_picker_page.dart';
 import '../features/settings/settings_pages.dart';
+import '../features/settings/theme_page.dart';
 import '../features/splash/splash_page.dart';
 import '../features/tags/tag_manager_page.dart';
 import '../features/todos/todo_item_page.dart';
@@ -289,6 +290,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootKey,
         path: '/settings',
         builder: (context, state) => const SettingsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootKey,
+        path: '/settings/theme',
+        builder: (context, state) => const ThemePage(),
       ),
       GoRoute(
         parentNavigatorKey: _rootKey,

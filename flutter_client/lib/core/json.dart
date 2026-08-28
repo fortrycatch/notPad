@@ -1,7 +1,21 @@
+import 'dart:convert';
+
 Map<String, dynamic> asMap(Object? value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) return Map<String, dynamic>.from(value);
   throw FormatException('Expected object, got ${value.runtimeType}');
+}
+
+Map<String, dynamic> asMeta(Object? value) {
+  if (value == null) return const {};
+  if (value is Map) return asMap(value);
+  if (value is String && value.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(value);
+      if (decoded is Map) return asMap(decoded);
+    } catch (_) {}
+  }
+  return const {};
 }
 
 List<T> asList<T>(Object? value, T Function(Object?) map) {

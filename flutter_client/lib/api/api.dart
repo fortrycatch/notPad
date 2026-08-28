@@ -649,6 +649,17 @@ class GroupApi {
     return _c.mutate('group.delete', input: groupId);
   }
 
+  Future<Map<String, dynamic>> updateMeta({
+    required String groupId,
+    required Map<String, dynamic> meta,
+  }) {
+    return _c.mutate(
+      'group.updateMeta',
+      input: {'groupId': groupId, 'meta': meta},
+      parse: asMap,
+    );
+  }
+
   Future<List<GroupMember>> listMembers(String groupId) {
     return _c.query(
       'group.listMembers',

@@ -17,13 +17,15 @@ class UserProfile {
 
   String get avatar => asString(meta['avatar']);
 
+  String get primaryColor => asString(meta['primaryColor']);
+
   factory UserProfile.fromJson(Object? json) {
     final map = asMap(json);
     return UserProfile(
       id: asString(map['id']),
       name: asString(map['name']),
       email: asString(map['email']),
-      meta: map['meta'] is Map ? asMap(map['meta']) : const {},
+      meta: asMeta(map['meta']),
     );
   }
 }
@@ -558,6 +560,8 @@ class Group {
   final String? role;
   final Map<String, dynamic> meta;
 
+  String get primaryColor => asString(meta['primaryColor']);
+
   factory Group.fromJson(Object? json) {
     final map = asMap(json);
     return Group(
@@ -568,7 +572,7 @@ class Group {
       createdAt: asDate(map['created_at']),
       updatedAt: asDate(map['updated_at']),
       role: asStringOrNull(map['role']),
-      meta: map['meta'] is Map ? asMap(map['meta']) : const {},
+      meta: asMeta(map['meta']),
     );
   }
 }

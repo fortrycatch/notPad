@@ -123,6 +123,11 @@ class AppDrawer extends ConsumerWidget {
               onTap: () => _go(context, '/settings/sessions'),
             ),
             ListTile(
+              leading: const Icon(Icons.palette_outlined),
+              title: const Text('主题色'),
+              onTap: () => _go(context, '/settings/theme'),
+            ),
+            ListTile(
               leading: const Icon(Icons.settings_outlined),
               title: const Text('设置'),
               onTap: () => _go(context, '/settings'),

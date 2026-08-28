@@ -154,7 +154,7 @@ class _TodoItemPageState extends ConsumerState<TodoItemPage> {
       canPop: !_dirty,
       onPopInvokedWithResult: _onPop,
       child: Scaffold(
-        appBar: AppBar(
+        appBar: FrostedAppBar(
           title: Text(_isNew ? '新建待办' : '编辑待办'),
           actions: [
             TextButton(

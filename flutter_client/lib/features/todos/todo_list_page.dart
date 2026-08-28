@@ -17,7 +17,7 @@ class TodoListPage extends ConsumerWidget {
     final async = ref.watch(todoListProvider(listId));
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
-      appBar: AppBar(
+      appBar: FrostedAppBar(
         title: Text(async.valueOrNull?.name ?? '待办'),
       ),
       floatingActionButton: canEdit

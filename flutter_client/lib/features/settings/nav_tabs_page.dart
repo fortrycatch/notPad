@@ -11,7 +11,7 @@ class NavTabsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final nav = ref.watch(navTabsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('底部导航')),
+      appBar: FrostedAppBar(title: const Text('底部导航')),
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

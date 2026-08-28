@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'frosted.dart';
+
 class ListSearchAppBar extends StatefulWidget implements PreferredSizeWidget {
   const ListSearchAppBar({
     super.key,
@@ -66,7 +68,7 @@ class _ListSearchAppBarState extends State<ListSearchAppBar> {
   @override
   Widget build(BuildContext context) {
     if (widget.searching) {
-      return AppBar(
+      return FrostedAppBar(
         leading: IconButton(
           tooltip: '关闭搜索',
           icon: const Icon(Icons.arrow_back),
@@ -101,7 +103,7 @@ class _ListSearchAppBarState extends State<ListSearchAppBar> {
       );
     }
 
-    return AppBar(
+    return FrostedAppBar(
       leading: widget.leading,
       title: Text(widget.title),
       actions: [
@@ -168,11 +170,7 @@ Future<void> showListFilterSheet({
                   ),
                   const SizedBox(height: 8),
                   content(context, refresh),
-                  const SizedBox(height: 16),
-                  FilledButton(
-                    onPressed: () => Navigator.of(sheetContext).pop(),
-                    child: const Text('完成'),
-                  ),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),

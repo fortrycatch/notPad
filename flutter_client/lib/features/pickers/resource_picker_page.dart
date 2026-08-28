@@ -13,7 +13,7 @@ class ResourcePickerPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: Text(_title)),
+      appBar: FrostedAppBar(title: Text(_title)),
       body: switch (type) {
         'note' => _NotesPicker(onPick: (refItem) => Navigator.pop(context, refItem)),
         'image' => _ImagesPicker(onPick: (refItem) => Navigator.pop(context, refItem)),

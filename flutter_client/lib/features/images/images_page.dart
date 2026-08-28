@@ -44,6 +44,8 @@ class _ImagesPageState extends ConsumerState<ImagesPage> {
     final canEdit = ref.watch(sessionProvider).canEdit;
     final grid = ref.watch(imageGridProvider);
     return Scaffold(
+      extendBody: true,
+      extendBodyBehindAppBar: true,
       appBar: ListSearchAppBar(
         title: '图床',
         leading: const DrawerMenuButton(),
@@ -109,7 +111,10 @@ class _ImagesPageState extends ConsumerState<ImagesPage> {
             child: RefreshIndicator(
               onRefresh: () => ref.read(imagesProvider(_query).notifier).refresh(),
               child: GridView.builder(
-                padding: EdgeInsets.zero,
+                padding: EdgeInsets.only(
+                  top: MediaQuery.paddingOf(context).top,
+                  bottom: MediaQuery.paddingOf(context).bottom,
+                ),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: grid.columns,
                   mainAxisSpacing: 0,

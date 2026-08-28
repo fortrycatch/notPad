@@ -20,7 +20,7 @@ class BookmarkDetailPage extends ConsumerWidget {
     final async = ref.watch(bookmarkProvider(id));
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
-      appBar: AppBar(
+      appBar: FrostedAppBar(
         title: const Text('书签'),
         actions: [
           IconButton(

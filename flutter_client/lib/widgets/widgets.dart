@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../core/trpc.dart';
 import '../models/models.dart';
 
+export 'frosted.dart';
+
 void showError(BuildContext context, Object error) {
   final message = error is TrpcException ? error.message : error.toString();
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));

@@ -46,7 +46,7 @@ class _ThemePageState extends ConsumerState<ThemePage> {
     final canEdit = !inGroup || session.isAdmin;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('主题色')),
+      appBar: FrostedAppBar(title: const Text('主题色')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [

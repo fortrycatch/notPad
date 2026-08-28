@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../providers/lists.dart';
 import '../../providers/nav_tabs.dart';
+import '../../widgets/frosted.dart';
 import 'app_drawer.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
@@ -33,11 +34,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
       child: Scaffold(
         key: _scaffoldKey,
+        extendBody: true,
         drawer: const AppDrawer(),
         body: widget.navigationShell,
         bottomNavigationBar: destinations.isEmpty
             ? null
-            : NavigationBar(
+            : FrostedNavigationBar(
                 selectedIndex: selectedIndex,
                 labelBehavior: destinations.length > 4
                     ? NavigationDestinationLabelBehavior.onlyShowSelected

@@ -46,6 +46,8 @@ class _DrivePageState extends ConsumerState<DrivePage> {
     final async = ref.watch(driveProvider(_query));
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
+      extendBody: true,
+      extendBodyBehindAppBar: true,
       appBar: ListSearchAppBar(
         title: async.valueOrNull?.currentFolder?.name ?? '网盘',
         leading: widget.folderId == null ? const DrawerMenuButton() : null,
@@ -233,7 +235,7 @@ class DriveFilePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final file = initial;
     return Scaffold(
-      appBar: AppBar(title: Text(file?.name ?? '文件')),
+      appBar: FrostedAppBar(title: Text(file?.name ?? '文件')),
       body: file == null
           ? FutureBuilder(
               future: ref.read(apiProvider).fileDrive.getDownloadUrl(id),

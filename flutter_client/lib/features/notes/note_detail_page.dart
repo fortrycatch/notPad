@@ -18,7 +18,7 @@ class NoteDetailPage extends ConsumerWidget {
     final tags = ref.watch(noteItemTagsProvider(id));
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
-      appBar: AppBar(
+      appBar: FrostedAppBar(
         title: const Text('笔记'),
         actions: [
           IconButton(

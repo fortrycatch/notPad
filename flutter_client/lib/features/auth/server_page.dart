@@ -48,7 +48,7 @@ class _ServerPageState extends ConsumerState<ServerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('服务器地址')),
+      appBar: FrostedAppBar(title: const Text('服务器地址')),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [

@@ -20,7 +20,7 @@ class NoteTagsPage extends ConsumerWidget {
     final canEdit = ref.watch(sessionProvider).canEdit;
 
     return Scaffold(
-      appBar: AppBar(title: Text(noteId == null ? '笔记标签' : '笔记标签')),
+      appBar: FrostedAppBar(title: Text(noteId == null ? '笔记标签' : '笔记标签')),
       floatingActionButton: canEdit
           ? FloatingActionButton(
               onPressed: () => _create(context, ref),

@@ -55,7 +55,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('注册')),
+      appBar: FrostedAppBar(title: const Text('注册')),
       body: Form(
         key: _formKey,
         child: ListView(

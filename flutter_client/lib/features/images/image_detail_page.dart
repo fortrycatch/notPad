@@ -67,7 +67,7 @@ class _ImageDetailPageState extends ConsumerState<ImageDetailPage> {
 
     if (image == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('图片')),
+        appBar: FrostedAppBar(title: const Text('图片')),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : const EmptyView(icon: Icons.broken_image_outlined, message: '找不到图片'),
@@ -75,7 +75,7 @@ class _ImageDetailPageState extends ConsumerState<ImageDetailPage> {
     }
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: FrostedAppBar(
         title: Text(image.name),
         actions: [
           IconButton(

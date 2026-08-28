@@ -75,7 +75,7 @@ class _BookmarkCreatePageState extends ConsumerState<BookmarkCreatePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: FrostedAppBar(
         title: const Text('添加书签'),
         actions: [
           TextButton(onPressed: _saving ? null : _save, child: const Text('保存')),

@@ -44,6 +44,8 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
     final tags = ref.watch(bookmarkTagsProvider);
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
+      extendBody: true,
+      extendBodyBehindAppBar: true,
       appBar: ListSearchAppBar(
         title: '书签',
         leading: const DrawerMenuButton(),

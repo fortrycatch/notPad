@@ -17,7 +17,7 @@ class GroupDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(groupProvider(id));
     return Scaffold(
-      appBar: AppBar(title: const Text('群组')),
+      appBar: FrostedAppBar(title: const Text('群组')),
       body: AsyncBody(
         value: async,
         onRetry: () => ref.invalidate(groupProvider(id)),
@@ -156,7 +156,7 @@ class GroupMembersPage extends ConsumerWidget {
     final isAdmin = myRole == 'owner' || myRole == 'admin';
     final isOwner = myRole == 'owner';
     return Scaffold(
-      appBar: AppBar(
+      appBar: FrostedAppBar(
         title: const Text('成员'),
         actions: [
           if (isAdmin)
@@ -343,7 +343,7 @@ class _GroupInvitesPageState extends ConsumerState<GroupInvitesPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('邀请')),
+      appBar: FrostedAppBar(title: const Text('邀请')),
       floatingActionButton: FloatingActionButton(
         onPressed: _createLink,
         child: const Icon(Icons.add_link),
@@ -416,7 +416,7 @@ class MyInvitesPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(myInvitesProvider);
     return Scaffold(
-      appBar: AppBar(
+      appBar: FrostedAppBar(
         title: const Text('我的邀请'),
         actions: [
           IconButton(

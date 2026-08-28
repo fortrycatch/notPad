@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/image_grid.dart';
+import '../../widgets/frosted.dart';
 
 class ImageGridPage extends ConsumerWidget {
   const ImageGridPage({super.key});
@@ -10,7 +11,7 @@ class ImageGridPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(imageGridProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('图床显示')),
+      appBar: FrostedAppBar(title: const Text('图床显示')),
       body: ListView(
         children: [
           SwitchListTile(

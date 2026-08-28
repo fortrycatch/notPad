@@ -159,7 +159,7 @@ class _GroupChatPageState extends ConsumerState<GroupChatPage> {
     final canPost = group.valueOrNull?.role != 'viewer';
     final myId = ref.watch(sessionProvider).user?.id;
     return Scaffold(
-      appBar: AppBar(title: Text(group.valueOrNull?.name ?? '群聊')),
+      appBar: FrostedAppBar(title: Text(group.valueOrNull?.name ?? '群聊')),
       body: Column(
         children: [
           Expanded(

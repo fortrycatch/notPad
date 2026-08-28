@@ -29,7 +29,9 @@ class _NotesPageState extends ConsumerState<NotesPage> {
     final canEdit = ref.watch(sessionProvider).canEdit;
 
     return Scaffold(
-      appBar: AppBar(
+      extendBody: true,
+      extendBodyBehindAppBar: true,
+      appBar: FrostedAppBar(
         leading: const DrawerMenuButton(),
         title: const Text('笔记'),
         actions: [

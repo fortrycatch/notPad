@@ -16,7 +16,9 @@ class TodosPage extends ConsumerWidget {
     final async = ref.watch(todoListsProvider);
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
-      appBar: AppBar(
+      extendBody: true,
+      extendBodyBehindAppBar: true,
+      appBar: FrostedAppBar(
         leading: const DrawerMenuButton(),
         title: const Text('待办'),
       ),

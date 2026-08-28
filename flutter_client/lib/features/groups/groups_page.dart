@@ -13,7 +13,7 @@ class GroupsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(groupsProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('群组')),
+      appBar: FrostedAppBar(title: const Text('群组')),
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.push('/groups/create'),
         child: const Icon(Icons.add),
@@ -96,7 +96,7 @@ class _GroupCreatePageState extends ConsumerState<GroupCreatePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: FrostedAppBar(
         title: const Text('新建群组'),
         actions: [TextButton(onPressed: _saving ? null : _save, child: const Text('创建'))],
       ),

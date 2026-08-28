@@ -14,7 +14,7 @@ class SettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(sessionProvider);
     return Scaffold(
-      appBar: AppBar(title: const Text('设置')),
+      appBar: FrostedAppBar(title: const Text('设置')),
       body: ListView(
         children: [
           ListTile(
@@ -143,7 +143,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   Widget build(BuildContext context) {
     final user = ref.watch(sessionProvider).user;
     return Scaffold(
-      appBar: AppBar(
+      appBar: FrostedAppBar(
         title: const Text('个人资料'),
         actions: [TextButton(onPressed: _saving ? null : _save, child: const Text('保存'))],
       ),
@@ -182,7 +182,7 @@ class StatsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(usageStatsProvider);
     return Scaffold(
-      appBar: AppBar(
+      appBar: FrostedAppBar(
         title: const Text('用量统计'),
         actions: [
           IconButton(
@@ -253,7 +253,7 @@ class _SettingKeysPageState extends ConsumerState<SettingKeysPage> {
   Widget build(BuildContext context) {
     final visible = _items.entries.where((entry) => !entry.key.startsWith('stat_')).toList();
     return Scaffold(
-      appBar: AppBar(title: const Text('键值设置')),
+      appBar: FrostedAppBar(title: const Text('键值设置')),
       floatingActionButton: FloatingActionButton(
         onPressed: _edit,
         child: const Icon(Icons.add),
@@ -324,7 +324,7 @@ class SessionsPage extends ConsumerWidget {
     final async = ref.watch(tokensProvider);
     final current = ref.watch(sessionProvider).token;
     return Scaffold(
-      appBar: AppBar(title: const Text('登录会话')),
+      appBar: FrostedAppBar(title: const Text('登录会话')),
       body: AsyncBody(
         value: async,
         onRetry: () => ref.invalidate(tokensProvider),

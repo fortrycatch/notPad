@@ -108,7 +108,7 @@ class _NoteEditPageState extends ConsumerState<NoteEditPage> {
       canPop: !_dirty,
       onPopInvokedWithResult: _onPop,
       child: Scaffold(
-        appBar: AppBar(
+        appBar: FrostedAppBar(
           title: Text(_isNew ? '新建笔记' : '编辑笔记'),
           actions: [
             TextButton(

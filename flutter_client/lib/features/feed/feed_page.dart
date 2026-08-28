@@ -16,7 +16,9 @@ class FeedPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(timelineProvider);
     return Scaffold(
-      appBar: AppBar(
+      extendBody: true,
+      extendBodyBehindAppBar: true,
+      appBar: FrostedAppBar(
         leading: const DrawerMenuButton(),
         title: const Text('动态'),
       ),
@@ -46,7 +48,12 @@ class FeedPage extends ConsumerWidget {
             child: RefreshIndicator(
               onRefresh: () => ref.read(timelineProvider.notifier).refresh(),
               child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                padding: EdgeInsets.fromLTRB(
+                  12,
+                  MediaQuery.paddingOf(context).top,
+                  12,
+                  16 + MediaQuery.paddingOf(context).bottom,
+                ),
                 itemCount: rows.length + (data.loadingMore ? 1 : 0),
                 itemBuilder: (context, index) {
                   if (index >= rows.length) {

@@ -60,7 +60,7 @@ class _TagManagerPageState extends ConsumerState<TagManagerPage> {
   Widget build(BuildContext context) {
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: FrostedAppBar(title: Text(widget.title)),
       floatingActionButton: canEdit
           ? FloatingActionButton(
               onPressed: _create,

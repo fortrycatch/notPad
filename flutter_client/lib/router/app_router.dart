@@ -25,6 +25,7 @@ import '../features/settings/settings_pages.dart';
 import '../features/settings/theme_page.dart';
 import '../features/splash/splash_page.dart';
 import '../features/tags/tag_manager_page.dart';
+import '../widgets/image_viewer.dart';
 import '../features/todos/todo_item_page.dart';
 import '../features/todos/todo_list_page.dart';
 import '../features/todos/todos_page.dart';
@@ -232,6 +233,17 @@ final routerProvider = Provider<GoRouter>((ref) {
           id: int.parse(state.pathParameters['id']!),
           initial: state.extra is BedImage ? state.extra as BedImage : null,
         ),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootKey,
+        path: '/viewer',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is ImageViewerArgs) {
+            return ImageViewerPage(url: extra.url, title: extra.title);
+          }
+          return const ImageViewerPage(url: '');
+        },
       ),
       GoRoute(
         parentNavigatorKey: _rootKey,

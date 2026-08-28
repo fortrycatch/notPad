@@ -1,32 +1,74 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
+import '../../core/media.dart';
 import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
+import '../../widgets/image_viewer.dart';
 import '../../widgets/widgets.dart';
 
-class ImageDetailPage extends ConsumerWidget {
+class ImageDetailPage extends ConsumerStatefulWidget {
   const ImageDetailPage({super.key, required this.id, this.initial});
 
   final int id;
   final BedImage? initial;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final query = ref.watch(imagesProvider(const ImagesQuery()));
-    final image = initial ??
-        query.valueOrNull?.items.where((item) => item.id == id).firstOrNull;
+  ConsumerState<ImageDetailPage> createState() => _ImageDetailPageState();
+}
+
+class _ImageDetailPageState extends ConsumerState<ImageDetailPage> {
+  BedImage? _image;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _image = widget.initial;
+    if (_image == null) _load();
+  }
+
+  Future<void> _load() async {
+    setState(() => _loading = true);
+    try {
+      final cached = ref.read(imagesProvider(const ImagesQuery())).valueOrNull?.items;
+      final hit = cached?.where((item) => item.id == widget.id).firstOrNull;
+      if (hit != null) {
+        setState(() => _image = hit);
+        return;
+      }
+      final userId = ref.read(sessionProvider).user?.id ?? '';
+      for (var page = 0; page < 8; page++) {
+        final items = await ref.read(apiProvider).imageBed.list(
+              userId: userId,
+              offset: page,
+            );
+        final found = items.where((item) => item.id == widget.id).firstOrNull;
+        if (found != null) {
+          if (mounted) setState(() => _image = found);
+          return;
+        }
+        if (items.length < pageSize) break;
+      }
+    } catch (error) {
+      if (mounted) showError(context, error);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final image = _image;
     final canEdit = ref.watch(sessionProvider).canEdit;
 
     if (image == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('图片')),
-        body: query.isLoading
+        body: _loading
             ? const Center(child: CircularProgressIndicator())
             : const EmptyView(icon: Icons.broken_image_outlined, message: '找不到图片'),
       );
@@ -37,8 +79,16 @@ class ImageDetailPage extends ConsumerWidget {
         title: Text(image.name),
         actions: [
           IconButton(
+            tooltip: '全屏查看',
+            onPressed: () => context.push(
+              '/viewer',
+              extra: ImageViewerArgs(url: image.url, title: image.name),
+            ),
+            icon: const Icon(Icons.fullscreen),
+          ),
+          IconButton(
             tooltip: '收藏',
-            onPressed: () => _toggleBookmark(context, ref, image),
+            onPressed: () => _toggleBookmark(image),
             icon: const Icon(Icons.star_outline),
           ),
           IconButton(
@@ -48,20 +98,15 @@ class ImageDetailPage extends ConsumerWidget {
           ),
           if (canEdit)
             IconButton(
-              onPressed: () => _rename(context, ref, image),
+              onPressed: () => _rename(image),
               icon: const Icon(Icons.edit_outlined),
             ),
         ],
       ),
-      body: ListView(
+      body: Column(
         children: [
-          AspectRatio(
-            aspectRatio: 1,
-            child: CachedNetworkImage(
-              imageUrl: image.url,
-              fit: BoxFit.contain,
-              errorWidget: (_, _, _) => const Icon(Icons.broken_image, size: 64),
-            ),
+          Expanded(
+            child: ZoomableImage(url: image.url),
           ),
           ListTile(
             title: const Text('大小'),
@@ -76,46 +121,54 @@ class ImageDetailPage extends ConsumerWidget {
               title: const Text('备注'),
               subtitle: Text(image.remark),
             ),
-          ListTile(
-            title: const Text('打开原图'),
-            trailing: const Icon(Icons.open_in_new),
-            onTap: () => launchUrl(Uri.parse(image.url), mode: LaunchMode.externalApplication),
-          ),
         ],
       ),
     );
   }
 
-  Future<void> _rename(BuildContext context, WidgetRef ref, BedImage image) async {
+  Future<void> _rename(BedImage image) async {
     final name = await promptText(context, title: '重命名', initial: image.name);
     if (name == null || name.trim().isEmpty) return;
     try {
       await ref.read(apiProvider).imageBed.rename(image.id, name.trim());
       ref.invalidate(imagesProvider(const ImagesQuery()));
-      if (context.mounted) showMessage(context, '已重命名');
+      if (mounted) {
+        setState(() {
+          _image = BedImage(
+            id: image.id,
+            name: name.trim(),
+            url: image.url,
+            size: image.size,
+            userId: image.userId,
+            createdAt: image.createdAt,
+            remark: image.remark,
+          );
+        });
+        showMessage(context, '已重命名');
+      }
     } catch (error) {
-      if (context.mounted) showError(context, error);
+      if (mounted) showError(context, error);
     }
   }
 
-  Future<void> _toggleBookmark(BuildContext context, WidgetRef ref, BedImage image) async {
+  Future<void> _toggleBookmark(BedImage image) async {
     try {
       final api = ref.read(apiProvider);
       final state = await api.bookmark.isBookmarked(type: 'image', refId: '${image.id}');
       if (state.bookmarked && state.id != null) {
         await api.bookmark.remove(state.id!);
-        if (context.mounted) showMessage(context, '已取消收藏');
+        if (mounted) showMessage(context, '已取消收藏');
       } else {
         await api.bookmark.add(
           type: 'image',
           title: image.name,
-          url: image.url,
+          url: resolveMediaUrl(image.url),
           refId: '${image.id}',
         );
-        if (context.mounted) showMessage(context, '已收藏');
+        if (mounted) showMessage(context, '已收藏');
       }
     } catch (error) {
-      if (context.mounted) showError(context, error);
+      if (mounted) showError(context, error);
     }
   }
 }

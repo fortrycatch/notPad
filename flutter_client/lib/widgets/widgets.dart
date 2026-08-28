@@ -237,7 +237,7 @@ void openTimelineItem(BuildContext context, TimelineItem item) {
     case 'note':
       context.push('/notes/${item.id}');
     case 'image':
-      context.push('/images/${item.id}');
+      context.push('/images/${item.id}', extra: BedImage.fromTimeline(item));
     case 'file':
       context.push('/drive/files/${item.id}');
     case 'bookmark':

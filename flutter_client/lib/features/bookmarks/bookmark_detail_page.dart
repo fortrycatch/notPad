@@ -4,8 +4,10 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/format.dart';
+import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
+import '../../widgets/image_viewer.dart';
 import '../../widgets/widgets.dart';
 
 class BookmarkDetailPage extends ConsumerWidget {
@@ -62,10 +64,17 @@ class BookmarkDetailPage extends ConsumerWidget {
                   ),
                 ),
               ],
+              if (item.type == 'image' && item.url.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 240,
+                  child: ZoomableImage(url: item.url),
+                ),
+              ],
               if (item.refId != null) ...[
                 const SizedBox(height: 8),
                 FilledButton.tonal(
-                  onPressed: () => _openRef(context, item.type, item.refId!),
+                  onPressed: () => _openRef(context, item),
                   child: const Text('打开原内容'),
                 ),
               ],
@@ -97,12 +106,25 @@ class BookmarkDetailPage extends ConsumerWidget {
     }
   }
 
-  void _openRef(BuildContext context, String type, String refId) {
-    switch (type) {
+  void _openRef(BuildContext context, Bookmark item) {
+    final refId = item.refId;
+    if (refId == null) return;
+    switch (item.type) {
       case 'note':
         context.push('/notes/$refId');
       case 'image':
-        context.push('/images/$refId');
+        context.push(
+          '/images/$refId',
+          extra: BedImage(
+            id: int.tryParse(refId) ?? 0,
+            name: item.title,
+            url: item.url,
+            size: 0,
+            userId: item.userId,
+            createdAt: item.createdAt,
+            remark: '',
+          ),
+        );
       case 'file':
         context.push('/drive/files/$refId');
       default:

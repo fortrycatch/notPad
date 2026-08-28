@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
 
+import '../../core/media.dart';
 import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
@@ -144,7 +145,7 @@ class _ImagesPageState extends ConsumerState<ImagesPage> {
                               children: [
                                 Expanded(
                                   child: CachedNetworkImage(
-                                    imageUrl: image.url,
+                                    imageUrl: thumbnailUrl(image.url, width: 480),
                                     fit: BoxFit.cover,
                                     errorWidget: (_, _, _) => const Icon(Icons.broken_image),
                                   ),

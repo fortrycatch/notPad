@@ -415,6 +415,18 @@ class BedImage {
   final DateTime createdAt;
   final String remark;
 
+  factory BedImage.fromTimeline(TimelineItem item) {
+    return BedImage(
+      id: asInt(item.id),
+      name: item.name,
+      url: item.url ?? '',
+      size: item.size,
+      userId: '',
+      createdAt: item.createdAt,
+      remark: '',
+    );
+  }
+
   factory BedImage.fromJson(Object? json) {
     final map = asMap(json);
     return BedImage(

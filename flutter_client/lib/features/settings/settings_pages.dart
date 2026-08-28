@@ -34,6 +34,12 @@ class SettingsPage extends ConsumerWidget {
             onTap: () => context.push('/settings/nav'),
           ),
           ListTile(
+            leading: const Icon(Icons.image_outlined),
+            title: const Text('图床显示'),
+            subtitle: const Text('名称和每行数量'),
+            onTap: () => context.push('/settings/images'),
+          ),
+          ListTile(
             leading: const Icon(Icons.dns_outlined),
             title: const Text('服务器地址'),
             subtitle: Text(session.baseUrl),

@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
+import '../../widgets/list_toolbar.dart';
 import '../../widgets/widgets.dart';
 import '../home/app_drawer.dart';
 
@@ -21,6 +22,7 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
   String _search = '';
   int? _tagId;
   String? _type;
+  bool _searching = false;
   final _searchController = TextEditingController();
 
   BookmarksQuery get _query => BookmarksQuery(
@@ -42,9 +44,21 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
     final tags = ref.watch(bookmarkTagsProvider);
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
-      appBar: AppBar(
+      appBar: ListSearchAppBar(
+        title: '书签',
         leading: const DrawerMenuButton(),
-        title: const Text('书签'),
+        searching: _searching,
+        searchController: _searchController,
+        searchHint: '搜索书签',
+        searchActive: _search.isNotEmpty,
+        filterActive: _tagId != null || _type != null,
+        onSearch: (value) => setState(() => _search = value),
+        onOpenSearch: () => setState(() => _searching = true),
+        onCloseSearch: () => setState(() {
+          _searching = false;
+          _search = _searchController.text.trim();
+        }),
+        onFilter: () => _showFilters(tags.valueOrNull ?? const []),
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -70,134 +84,132 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
               child: const Icon(Icons.add),
             )
           : null,
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-            child: SearchBar(
-              controller: _searchController,
-              hintText: '搜索书签',
-              leading: const Icon(Icons.search),
-              onSubmitted: (value) => setState(() => _search = value.trim()),
-              trailing: [
-                if (_search.isNotEmpty)
-                  IconButton(
-                    onPressed: () {
-                      _searchController.clear();
-                      setState(() => _search = '');
-                    },
-                    icon: const Icon(Icons.close),
-                  ),
-              ],
-            ),
-          ),
-          SizedBox(
-            height: 48,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              children: [
-                _chip(null, '全部类型', _type == null, () => setState(() => _type = null)),
-                _chip('url', '链接', _type == 'url', () => setState(() => _type = 'url')),
-                _chip('note', '笔记', _type == 'note', () => setState(() => _type = 'note')),
-                _chip('image', '图片', _type == 'image', () => setState(() => _type = 'image')),
-                _chip('file', '文件', _type == 'file', () => setState(() => _type = 'file')),
-              ],
-            ),
-          ),
-          if (tags.hasValue && tags.requireValue.isNotEmpty)
-            SizedBox(
-              height: 40,
+      body: AsyncBody(
+        value: async,
+        onRetry: () => ref.read(bookmarksProvider(_query).notifier).refresh(),
+        builder: (data) {
+          if (data.items.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: () => ref.read(bookmarksProvider(_query).notifier).refresh(),
               child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: const Text('全部标签'),
-                      selected: _tagId == null,
-                      onSelected: (_) => setState(() => _tagId = null),
-                    ),
+                  const SizedBox(height: 160),
+                  EmptyView(
+                    icon: Icons.bookmark_outline,
+                    message: _search.isNotEmpty || _tagId != null || _type != null
+                        ? '没有符合条件的书签'
+                        : '还没有书签',
                   ),
-                  for (final tag in tags.requireValue)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(tag.name),
-                        selected: _tagId == tag.id,
-                        onSelected: (_) => setState(() => _tagId = tag.id),
-                      ),
-                    ),
                 ],
               ),
-            ),
-          Expanded(
-            child: AsyncBody(
-              value: async,
-              onRetry: () => ref.read(bookmarksProvider(_query).notifier).refresh(),
-              builder: (data) {
-                if (data.items.isEmpty) {
-                  return RefreshIndicator(
-                    onRefresh: () => ref.read(bookmarksProvider(_query).notifier).refresh(),
-                    child: ListView(
-                      children: const [
-                        SizedBox(height: 160),
-                        EmptyView(icon: Icons.bookmark_outline, message: '还没有书签'),
-                      ],
+            );
+          }
+          return NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification.metrics.extentAfter < 240) {
+                ref.read(bookmarksProvider(_query).notifier).loadMore();
+              }
+              return false;
+            },
+            child: RefreshIndicator(
+              onRefresh: () => ref.read(bookmarksProvider(_query).notifier).refresh(),
+              child: ListView.separated(
+                itemCount: data.items.length + (data.loadingMore ? 1 : 0),
+                separatorBuilder: (_, _) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  if (index >= data.items.length) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+                  final item = data.items[index];
+                  return ListTile(
+                    leading: Icon(typeIcon(item.type)),
+                    title: Text(item.title),
+                    subtitle: Text(
+                      [
+                        formatDateTime(item.createdAt),
+                        if (item.description.isNotEmpty) item.description,
+                      ].join(' · '),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
+                    onTap: () => context.push('/bookmarks/${item.id}'),
+                    onLongPress: () => _actions(item),
                   );
-                }
-                return NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.metrics.extentAfter < 240) {
-                      ref.read(bookmarksProvider(_query).notifier).loadMore();
-                    }
-                    return false;
-                  },
-                  child: RefreshIndicator(
-                    onRefresh: () => ref.read(bookmarksProvider(_query).notifier).refresh(),
-                    child: ListView.separated(
-                      itemCount: data.items.length + (data.loadingMore ? 1 : 0),
-                      separatorBuilder: (_, _) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        if (index >= data.items.length) {
-                          return const Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        }
-                        final item = data.items[index];
-                        return ListTile(
-                          leading: Icon(typeIcon(item.type)),
-                          title: Text(item.title),
-                          subtitle: Text(
-                            [
-                              formatDateTime(item.createdAt),
-                              if (item.description.isNotEmpty) item.description,
-                            ].join(' · '),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          onTap: () => context.push('/bookmarks/${item.id}'),
-                          onLongPress: () => _actions(item),
-                        );
-                      },
-                    ),
-                  ),
-                );
-              },
+                },
+              ),
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }
 
-  Widget _chip(String? value, String label, bool selected, VoidCallback onTap) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(label: Text(label), selected: selected, onSelected: (_) => onTap()),
+  Future<void> _showFilters(List<TagItem> tags) {
+    return showListFilterSheet(
+      context: context,
+      title: '筛选书签',
+      canClear: _tagId != null || _type != null,
+      onReset: () => setState(() {
+        _tagId = null;
+        _type = null;
+      }),
+      content: (context, refresh) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('类型', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            FilterChipWrap(
+              children: [
+                for (final entry in const [
+                  (null, '全部'),
+                  ('url', '链接'),
+                  ('note', '笔记'),
+                  ('image', '图片'),
+                  ('file', '文件'),
+                ])
+                  FilterChip(
+                    label: Text(entry.$2),
+                    selected: _type == entry.$1,
+                    onSelected: (_) {
+                      setState(() => _type = entry.$1);
+                      refresh();
+                    },
+                  ),
+              ],
+            ),
+            if (tags.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text('标签', style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: 8),
+              FilterChipWrap(
+                children: [
+                  FilterChip(
+                    label: const Text('全部'),
+                    selected: _tagId == null,
+                    onSelected: (_) {
+                      setState(() => _tagId = null);
+                      refresh();
+                    },
+                  ),
+                  for (final tag in tags)
+                    FilterChip(
+                      label: Text(tag.name),
+                      selected: _tagId == tag.id,
+                      onSelected: (_) {
+                        setState(() => _tagId = tag.id);
+                        refresh();
+                      },
+                    ),
+                ],
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 

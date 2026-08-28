@@ -7,8 +7,10 @@ import 'package:mime/mime.dart';
 
 import '../../core/media.dart';
 import '../../models/models.dart';
+import '../../providers/image_grid.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
+import '../../widgets/list_toolbar.dart';
 import '../../widgets/widgets.dart';
 import '../home/app_drawer.dart';
 
@@ -23,6 +25,7 @@ class _ImagesPageState extends ConsumerState<ImagesPage> {
   String _sort = 'time_desc';
   String _search = '';
   int? _tagId;
+  bool _searching = false;
   final _searchController = TextEditingController();
   bool _uploading = false;
 
@@ -39,10 +42,23 @@ class _ImagesPageState extends ConsumerState<ImagesPage> {
     final async = ref.watch(imagesProvider(_query));
     final tags = ref.watch(imageTagsProvider);
     final canEdit = ref.watch(sessionProvider).canEdit;
+    final grid = ref.watch(imageGridProvider);
     return Scaffold(
-      appBar: AppBar(
+      appBar: ListSearchAppBar(
+        title: '图床',
         leading: const DrawerMenuButton(),
-        title: const Text('图床'),
+        searching: _searching,
+        searchController: _searchController,
+        searchHint: '搜索图片',
+        searchActive: _search.isNotEmpty,
+        filterActive: _tagId != null,
+        onSearch: (value) => setState(() => _search = value),
+        onOpenSearch: () => setState(() => _searching = true),
+        onCloseSearch: () => setState(() {
+          _searching = false;
+          _search = _searchController.text.trim();
+        }),
+        onFilter: () => _showFilters(tags.valueOrNull ?? const []),
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -73,106 +89,82 @@ class _ImagesPageState extends ConsumerState<ImagesPage> {
                   : const Icon(Icons.add),
             )
           : null,
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: SearchBar(
-              controller: _searchController,
-              hintText: '搜索图片',
-              leading: const Icon(Icons.search),
-              onSubmitted: (value) => setState(() => _search = value.trim()),
-            ),
-          ),
-          if (tags.hasValue && tags.requireValue.isNotEmpty)
-            SizedBox(
-              height: 40,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                children: [
-                  FilterChip(
-                    label: const Text('全部'),
-                    selected: _tagId == null,
-                    onSelected: (_) => setState(() => _tagId = null),
-                  ),
-                  const SizedBox(width: 8),
-                  for (final tag in tags.requireValue)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(tag.name),
-                        selected: _tagId == tag.id,
-                        onSelected: (_) => setState(() => _tagId = tag.id),
-                      ),
-                    ),
-                ],
+      body: AsyncBody(
+        value: async,
+        onRetry: () => ref.read(imagesProvider(_query).notifier).refresh(),
+        builder: (data) {
+          if (data.items.isEmpty) {
+            return EmptyView(
+              icon: Icons.image_outlined,
+              message: _search.isNotEmpty || _tagId != null ? '没有符合条件的图片' : '还没有图片',
+            );
+          }
+          return NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification.metrics.extentAfter < 240) {
+                ref.read(imagesProvider(_query).notifier).loadMore();
+              }
+              return false;
+            },
+            child: RefreshIndicator(
+              onRefresh: () => ref.read(imagesProvider(_query).notifier).refresh(),
+              child: GridView.builder(
+                padding: EdgeInsets.zero,
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: grid.columns,
+                  mainAxisSpacing: 0,
+                  crossAxisSpacing: 0,
+                ),
+                itemCount: data.items.length,
+                itemBuilder: (context, index) {
+                  final image = data.items[index];
+                  return _ImageTile(
+                    image: image,
+                    showName: grid.showNames,
+                    onTap: () => context.push('/images/${image.id}', extra: image),
+                    onLongPress: () => _actions(image),
+                  );
+                },
               ),
             ),
-          Expanded(
-            child: AsyncBody(
-              value: async,
-              onRetry: () => ref.read(imagesProvider(_query).notifier).refresh(),
-              builder: (data) {
-                if (data.items.isEmpty) {
-                  return const EmptyView(icon: Icons.image_outlined, message: '还没有图片');
-                }
-                return NotificationListener<ScrollNotification>(
-                  onNotification: (notification) {
-                    if (notification.metrics.extentAfter < 240) {
-                      ref.read(imagesProvider(_query).notifier).loadMore();
-                    }
-                    return false;
-                  },
-                  child: RefreshIndicator(
-                    onRefresh: () => ref.read(imagesProvider(_query).notifier).refresh(),
-                    child: GridView.builder(
-                      padding: const EdgeInsets.all(8),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 8,
-                        crossAxisSpacing: 8,
-                        childAspectRatio: 0.9,
-                      ),
-                      itemCount: data.items.length,
-                      itemBuilder: (context, index) {
-                        final image = data.items[index];
-                        return InkWell(
-                          onTap: () => context.push('/images/${image.id}', extra: image),
-                          onLongPress: () => _actions(image),
-                          child: Card(
-                            clipBehavior: Clip.antiAlias,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Expanded(
-                                  child: CachedNetworkImage(
-                                    imageUrl: thumbnailUrl(image.url, width: 480),
-                                    fit: BoxFit.cover,
-                                    errorWidget: (_, _, _) => const Icon(Icons.broken_image),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(8),
-                                  child: Text(
-                                    image.name,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                );
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showFilters(List<TagItem> tags) {
+    return showListFilterSheet(
+      context: context,
+      title: '筛选图片',
+      canClear: _tagId != null,
+      onReset: () => setState(() => _tagId = null),
+      content: (context, refresh) {
+        if (tags.isEmpty) {
+          return Text('还没有标签', style: Theme.of(context).textTheme.bodyMedium);
+        }
+        return FilterChipWrap(
+          children: [
+            FilterChip(
+              label: const Text('全部'),
+              selected: _tagId == null,
+              onSelected: (_) {
+                setState(() => _tagId = null);
+                refresh();
               },
             ),
-          ),
-        ],
-      ),
+            for (final tag in tags)
+              FilterChip(
+                label: Text(tag.name),
+                selected: _tagId == tag.id,
+                onSelected: (_) {
+                  setState(() => _tagId = tag.id);
+                  refresh();
+                },
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -223,5 +215,74 @@ class _ImagesPageState extends ConsumerState<ImagesPage> {
     } catch (error) {
       if (mounted) showError(context, error);
     }
+  }
+}
+
+class _ImageTile extends StatelessWidget {
+  const _ImageTile({
+    required this.image,
+    required this.showName,
+    required this.onTap,
+    required this.onLongPress,
+  });
+
+  final BedImage image;
+  final bool showName;
+  final VoidCallback onTap;
+  final VoidCallback onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          CachedNetworkImage(
+            imageUrl: thumbnailUrl(image.url, width: 480),
+            fit: BoxFit.cover,
+            errorWidget: (_, _, _) => ColoredBox(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              child: const Icon(Icons.broken_image),
+            ),
+          ),
+          if (showName && image.name.isNotEmpty)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: DecoratedBox(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Color(0x99000000),
+                      Color(0x00000000),
+                    ],
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(6, 20, 6, 6),
+                  child: Text(
+                    image.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      shadows: [
+                        Shadow(blurRadius: 6, color: Colors.black54),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }

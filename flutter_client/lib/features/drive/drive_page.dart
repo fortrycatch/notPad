@@ -9,6 +9,7 @@ import '../../core/format.dart';
 import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
+import '../../widgets/list_toolbar.dart';
 import '../../widgets/widgets.dart';
 import '../home/app_drawer.dart';
 
@@ -24,6 +25,7 @@ class DrivePage extends ConsumerStatefulWidget {
 class _DrivePageState extends ConsumerState<DrivePage> {
   String _sort = 'time_desc';
   String _search = '';
+  bool _searching = false;
   bool _uploading = false;
   final _searchController = TextEditingController();
 
@@ -44,9 +46,19 @@ class _DrivePageState extends ConsumerState<DrivePage> {
     final async = ref.watch(driveProvider(_query));
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
-      appBar: AppBar(
+      appBar: ListSearchAppBar(
+        title: async.valueOrNull?.currentFolder?.name ?? '网盘',
         leading: widget.folderId == null ? const DrawerMenuButton() : null,
-        title: Text(async.valueOrNull?.currentFolder?.name ?? '网盘'),
+        searching: _searching,
+        searchController: _searchController,
+        searchHint: '搜索当前目录',
+        searchActive: _search.isNotEmpty,
+        onSearch: (value) => setState(() => _search = value),
+        onOpenSearch: () => setState(() => _searching = true),
+        onCloseSearch: () => setState(() {
+          _searching = false;
+          _search = _searchController.text.trim();
+        }),
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
@@ -77,51 +89,39 @@ class _DrivePageState extends ConsumerState<DrivePage> {
                   : const Icon(Icons.upload_file),
             )
           : null,
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: SearchBar(
-              controller: _searchController,
-              hintText: '搜索当前目录',
-              leading: const Icon(Icons.search),
-              onSubmitted: (value) => setState(() => _search = value.trim()),
-            ),
-          ),
-          Expanded(
-            child: AsyncBody(
-              value: async,
-              onRetry: () => ref.read(driveProvider(_query).notifier).refresh(),
-              builder: (data) {
-                if (data.folders.isEmpty && data.files.isEmpty) {
-                  return const EmptyView(icon: Icons.folder_off_outlined, message: '空文件夹');
-                }
-                return RefreshIndicator(
-                  onRefresh: () => ref.read(driveProvider(_query).notifier).refresh(),
-                  child: ListView(
-                    children: [
-                      for (final folder in data.folders)
-                        ListTile(
-                          leading: const Icon(Icons.folder_outlined),
-                          title: Text(folder.name),
-                          onTap: () => context.push('/drive/folders/${folder.id}'),
-                          onLongPress: canEdit ? () => _folderActions(folder) : null,
-                        ),
-                      for (final file in data.files)
-                        ListTile(
-                          leading: const Icon(Icons.insert_drive_file_outlined),
-                          title: Text(file.name),
-                          subtitle: Text('${formatBytes(file.size)} · ${formatDateTime(file.createdAt)}'),
-                          onTap: () => context.push('/drive/files/${file.id}', extra: file),
-                          onLongPress: canEdit ? () => _fileActions(file) : null,
-                        ),
-                    ],
+      body: AsyncBody(
+        value: async,
+        onRetry: () => ref.read(driveProvider(_query).notifier).refresh(),
+        builder: (data) {
+          if (data.folders.isEmpty && data.files.isEmpty) {
+            return EmptyView(
+              icon: Icons.folder_off_outlined,
+              message: _search.isNotEmpty ? '没有符合条件的文件' : '空文件夹',
+            );
+          }
+          return RefreshIndicator(
+            onRefresh: () => ref.read(driveProvider(_query).notifier).refresh(),
+            child: ListView(
+              children: [
+                for (final folder in data.folders)
+                  ListTile(
+                    leading: const Icon(Icons.folder_outlined),
+                    title: Text(folder.name),
+                    onTap: () => context.push('/drive/folders/${folder.id}'),
+                    onLongPress: canEdit ? () => _folderActions(folder) : null,
                   ),
-                );
-              },
+                for (final file in data.files)
+                  ListTile(
+                    leading: const Icon(Icons.insert_drive_file_outlined),
+                    title: Text(file.name),
+                    subtitle: Text('${formatBytes(file.size)} · ${formatDateTime(file.createdAt)}'),
+                    onTap: () => context.push('/drive/files/${file.id}', extra: file),
+                    onLongPress: canEdit ? () => _fileActions(file) : null,
+                  ),
+              ],
             ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

@@ -6,6 +6,7 @@ import '../../core/format.dart';
 import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
+import '../../widgets/list_toolbar.dart';
 import '../../widgets/widgets.dart';
 import '../home/app_drawer.dart';
 
@@ -32,6 +33,14 @@ class _NotesPageState extends ConsumerState<NotesPage> {
         leading: const DrawerMenuButton(),
         title: const Text('笔记'),
         actions: [
+          IconButton(
+            tooltip: '筛选',
+            onPressed: () => _showFilters(tags.valueOrNull ?? const []),
+            icon: Badge(
+              isLabelVisible: _tagId != null,
+              child: const Icon(Icons.filter_list),
+            ),
+          ),
           if (canEdit)
             IconButton(
               tooltip: '标签',
@@ -46,51 +55,24 @@ class _NotesPageState extends ConsumerState<NotesPage> {
               child: const Icon(Icons.add),
             )
           : null,
-      body: Column(
-        children: [
-          if (tags.hasValue && tags.requireValue.isNotEmpty)
-            SizedBox(
-              height: 48,
+      body: AsyncBody(
+        value: async,
+        onRetry: () => ref.read(notesProvider(_query).notifier).refresh(),
+        builder: (data) {
+          if (data.items.isEmpty) {
+            return RefreshIndicator(
+              onRefresh: () => ref.read(notesProvider(_query).notifier).refresh(),
               child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: FilterChip(
-                      label: const Text('全部'),
-                      selected: _tagId == null,
-                      onSelected: (_) => setState(() => _tagId = null),
-                    ),
+                  const SizedBox(height: 160),
+                  EmptyView(
+                    icon: Icons.sticky_note_2_outlined,
+                    message: _tagId != null ? '没有符合条件的笔记' : '还没有笔记',
                   ),
-                  for (final tag in tags.requireValue)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(tag.name),
-                        selected: _tagId == tag.id,
-                        onSelected: (_) => setState(() => _tagId = tag.id),
-                      ),
-                    ),
                 ],
               ),
-            ),
-          Expanded(
-            child: AsyncBody(
-              value: async,
-              onRetry: () => ref.read(notesProvider(_query).notifier).refresh(),
-              builder: (data) {
-                if (data.items.isEmpty) {
-                  return RefreshIndicator(
-                    onRefresh: () => ref.read(notesProvider(_query).notifier).refresh(),
-                    child: ListView(
-                      children: const [
-                        SizedBox(height: 160),
-                        EmptyView(icon: Icons.sticky_note_2_outlined, message: '还没有笔记'),
-                      ],
-                    ),
-                  );
-                }
+            );
+          }
                 return NotificationListener<ScrollNotification>(
                   onNotification: (notification) {
                     if (notification.metrics.extentAfter < 240) {
@@ -129,10 +111,42 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                   ),
                 );
               },
-            ),
-          ),
-        ],
       ),
+    );
+  }
+
+  Future<void> _showFilters(List<TagItem> tags) {
+    return showListFilterSheet(
+      context: context,
+      title: '筛选笔记',
+      canClear: _tagId != null,
+      onReset: () => setState(() => _tagId = null),
+      content: (context, refresh) {
+        if (tags.isEmpty) {
+          return Text('还没有标签', style: Theme.of(context).textTheme.bodyMedium);
+        }
+        return FilterChipWrap(
+          children: [
+            FilterChip(
+              label: const Text('全部'),
+              selected: _tagId == null,
+              onSelected: (_) {
+                setState(() => _tagId = null);
+                refresh();
+              },
+            ),
+            for (final tag in tags)
+              FilterChip(
+                label: Text(tag.name),
+                selected: _tagId == tag.id,
+                onSelected: (_) {
+                  setState(() => _tagId = tag.id);
+                  refresh();
+                },
+              ),
+          ],
+        );
+      },
     );
   }
 

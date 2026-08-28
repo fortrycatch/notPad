@@ -21,6 +21,7 @@ import '../features/notes/note_edit_page.dart';
 import '../features/notes/note_tags_page.dart';
 import '../features/notes/notes_page.dart';
 import '../features/pickers/resource_picker_page.dart';
+import '../features/settings/image_grid_page.dart';
 import '../features/settings/nav_tabs_page.dart';
 import '../features/settings/settings_pages.dart';
 import '../features/settings/theme_page.dart';
@@ -321,6 +322,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootKey,
         path: '/settings/nav',
         builder: (context, state) => const NavTabsPage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootKey,
+        path: '/settings/images',
+        builder: (context, state) => const ImageGridPage(),
       ),
       GoRoute(
         parentNavigatorKey: _rootKey,

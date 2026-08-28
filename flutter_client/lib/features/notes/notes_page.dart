@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
 import '../../widgets/widgets.dart';
+import '../home/app_drawer.dart';
 
 class NotesPage extends ConsumerStatefulWidget {
   const NotesPage({super.key});
@@ -28,9 +29,9 @@ class _NotesPageState extends ConsumerState<NotesPage> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const DrawerMenuButton(),
         title: const Text('笔记'),
         actions: [
-          const ScopeButton(),
           if (canEdit)
             IconButton(
               tooltip: '标签',

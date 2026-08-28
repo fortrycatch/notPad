@@ -16,7 +16,6 @@ import '../features/groups/groups_page.dart';
 import '../features/home/home_shell.dart';
 import '../features/images/image_detail_page.dart';
 import '../features/images/images_page.dart';
-import '../features/more/more_page.dart';
 import '../features/notes/note_detail_page.dart';
 import '../features/notes/note_edit_page.dart';
 import '../features/notes/note_tags_page.dart';
@@ -56,7 +55,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (!session.isLoggedIn && !authPage && loc != '/server') {
         return '/login';
       }
-      if (session.isLoggedIn && (authPage || loc == '/splash')) {
+      if (session.isLoggedIn && (authPage || loc == '/splash' || loc == '/more')) {
         return '/feed';
       }
       return null;
@@ -100,14 +99,6 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/bookmarks',
                 pageBuilder: (context, state) => const NoTransitionPage(child: BookmarksPage()),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: '/more',
-                pageBuilder: (context, state) => const NoTransitionPage(child: MorePage()),
               ),
             ],
           ),

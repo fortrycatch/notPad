@@ -6,6 +6,7 @@ import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
 import '../../widgets/widgets.dart';
+import '../home/app_drawer.dart';
 
 class TodosPage extends ConsumerWidget {
   const TodosPage({super.key});
@@ -16,8 +17,8 @@ class TodosPage extends ConsumerWidget {
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
       appBar: AppBar(
+        leading: const DrawerMenuButton(),
         title: const Text('待办'),
-        actions: const [ScopeButton()],
       ),
       floatingActionButton: canEdit
           ? FloatingActionButton(

@@ -1,0 +1,158 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../providers/lists.dart';
+import '../../providers/session.dart';
+import '../../widgets/widgets.dart';
+
+class HomeDrawerController extends InheritedWidget {
+  const HomeDrawerController({
+    super.key,
+    required this.openDrawer,
+    required super.child,
+  });
+
+  final VoidCallback openDrawer;
+
+  static void open(BuildContext context) {
+    final controller = context.dependOnInheritedWidgetOfExactType<HomeDrawerController>();
+    controller?.openDrawer();
+  }
+
+  @override
+  bool updateShouldNotify(HomeDrawerController oldWidget) =>
+      openDrawer != oldWidget.openDrawer;
+}
+
+class DrawerMenuButton extends StatelessWidget {
+  const DrawerMenuButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.menu),
+      tooltip: '菜单',
+      onPressed: () => HomeDrawerController.open(context),
+    );
+  }
+}
+
+class AppDrawer extends ConsumerWidget {
+  const AppDrawer({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(sessionProvider);
+    final user = session.user;
+    final groups = ref.watch(groupsProvider).valueOrNull ?? const [];
+    final currentGroup = groups.where((item) => item.id == session.groupId).firstOrNull;
+
+    return Drawer(
+      child: SafeArea(
+        child: ListView(
+          children: [
+            ListTile(
+              leading: CircleAvatar(
+                child: Text(
+                  (user?.name.isNotEmpty == true ? user!.name[0] : '?').toUpperCase(),
+                ),
+              ),
+              title: Text(user?.name ?? '未登录'),
+              subtitle: Text(user?.email ?? ''),
+              onTap: () => _go(context, '/settings/profile'),
+            ),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Text('空间'),
+            ),
+            ListTile(
+              leading: Icon(
+                session.groupId == null ? Icons.person : Icons.person_outline,
+              ),
+              title: const Text('个人空间'),
+              selected: session.groupId == null,
+              onTap: () => _switchSpace(context, ref),
+            ),
+            for (final group in groups)
+              ListTile(
+                leading: Icon(
+                  session.groupId == group.id ? Icons.workspaces : Icons.workspaces_outlined,
+                ),
+                title: Text(group.name),
+                subtitle: Text(roleLabel(group.role)),
+                selected: session.groupId == group.id,
+                onTap: () => _switchSpace(
+                  context,
+                  ref,
+                  groupId: group.id,
+                  role: group.role,
+                ),
+              ),
+            ListTile(
+              leading: const Icon(Icons.group_outlined),
+              title: const Text('管理群组'),
+              onTap: () => _go(context, '/groups'),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.image_outlined),
+              title: const Text('图床'),
+              onTap: () => _go(context, '/images'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.folder_outlined),
+              title: const Text('网盘'),
+              onTap: () => _go(context, '/drive'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.mail_outline),
+              title: const Text('我的邀请'),
+              onTap: () => _go(context, '/invites'),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const Icon(Icons.bar_chart_outlined),
+              title: const Text('用量统计'),
+              onTap: () => _go(context, '/settings/stats'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.devices_outlined),
+              title: const Text('登录会话'),
+              onTap: () => _go(context, '/settings/sessions'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text('设置'),
+              onTap: () => _go(context, '/settings'),
+            ),
+            if (currentGroup != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  '当前：${currentGroup.name}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _switchSpace(
+    BuildContext context,
+    WidgetRef ref, {
+    String? groupId,
+    String? role,
+  }) async {
+    Navigator.of(context).pop();
+    await ref.read(sessionProvider.notifier).setGroup(groupId: groupId, role: role);
+  }
+
+  void _go(BuildContext context, String location) {
+    Navigator.of(context).pop();
+    context.push(location);
+  }
+}

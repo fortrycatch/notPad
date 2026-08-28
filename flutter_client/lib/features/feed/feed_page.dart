@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/format.dart';
 import '../../providers/lists.dart';
 import '../../widgets/widgets.dart';
+import '../home/app_drawer.dart';
 
 class FeedPage extends ConsumerWidget {
   const FeedPage({super.key});
@@ -13,8 +14,8 @@ class FeedPage extends ConsumerWidget {
     final async = ref.watch(timelineProvider);
     return Scaffold(
       appBar: AppBar(
+        leading: const DrawerMenuButton(),
         title: const Text('动态'),
-        actions: const [ScopeButton()],
       ),
       body: AsyncBody(
         value: async,

@@ -4,8 +4,6 @@ import 'package:go_router/go_router.dart';
 
 import '../core/trpc.dart';
 import '../models/models.dart';
-import '../providers/lists.dart';
-import '../providers/session.dart';
 
 void showError(BuildContext context, Object error) {
   final message = error is TrpcException ? error.message : error.toString();
@@ -57,35 +55,73 @@ Future<String?> promptText(
   String? hint,
   String? initial,
   String confirmLabel = '确定',
-}) async {
-  final controller = TextEditingController(text: initial ?? '');
-  final result = await showDialog<String>(
+}) {
+  return showDialog<String>(
     context: context,
-    builder: (context) {
-      return AlertDialog(
-        title: Text(title),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(hintText: hint),
-          textInputAction: TextInputAction.done,
-          onSubmitted: (value) => Navigator.of(context).pop(value),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: Text(confirmLabel),
-          ),
-        ],
-      );
-    },
+    builder: (context) => _PromptDialog(
+      title: title,
+      hint: hint,
+      initial: initial,
+      confirmLabel: confirmLabel,
+    ),
   );
-  controller.dispose();
-  return result;
+}
+
+class _PromptDialog extends StatefulWidget {
+  const _PromptDialog({
+    required this.title,
+    this.hint,
+    this.initial,
+    required this.confirmLabel,
+  });
+
+  final String title;
+  final String? hint;
+  final String? initial;
+  final String confirmLabel;
+
+  @override
+  State<_PromptDialog> createState() => _PromptDialogState();
+}
+
+class _PromptDialogState extends State<_PromptDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initial ?? '');
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        decoration: InputDecoration(hintText: widget.hint),
+        textInputAction: TextInputAction.done,
+        onSubmitted: (value) => Navigator.of(context).pop(value),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(_controller.text),
+          child: Text(widget.confirmLabel),
+        ),
+      ],
+    );
+  }
 }
 
 class AsyncBody<T> extends StatelessWidget {
@@ -163,81 +199,6 @@ class EmptyView extends StatelessWidget {
       ),
     );
   }
-}
-
-class ScopeButton extends ConsumerWidget {
-  const ScopeButton({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final session = ref.watch(sessionProvider);
-    final groups = ref.watch(groupsProvider);
-    final current = groups.maybeWhen(
-      data: (items) {
-        if (session.groupId == null) return '个人空间';
-        return items
-            .where((item) => item.id == session.groupId)
-            .map((item) => item.name)
-            .firstOrNull ?? '群组';
-      },
-      orElse: () => session.groupId == null ? '个人空间' : '群组',
-    );
-
-    return TextButton.icon(
-      onPressed: () => showScopeSheet(context, ref, groups.valueOrNull ?? const []),
-      icon: const Icon(Icons.workspaces_outlined),
-      label: Text(current, overflow: TextOverflow.ellipsis),
-    );
-  }
-}
-
-Future<void> showScopeSheet(BuildContext context, WidgetRef ref, List<Group> groups) async {
-    final session = ref.read(sessionProvider);
-    await showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              const ListTile(title: Text('切换空间')),
-              RadioListTile<String?>(
-                value: null,
-                groupValue: session.groupId,
-                title: const Text('个人空间'),
-                onChanged: (_) async {
-                  await ref.read(sessionProvider.notifier).setGroup();
-                  if (context.mounted) Navigator.of(context).pop();
-                },
-              ),
-              for (final group in groups)
-                RadioListTile<String?>(
-                  value: group.id,
-                  groupValue: session.groupId,
-                  title: Text(group.name),
-                  subtitle: Text(roleLabel(group.role)),
-                  onChanged: (_) async {
-                    await ref.read(sessionProvider.notifier).setGroup(
-                          groupId: group.id,
-                          role: group.role,
-                        );
-                    if (context.mounted) Navigator.of(context).pop();
-                  },
-                ),
-              ListTile(
-                leading: const Icon(Icons.group_outlined),
-                title: const Text('管理群组'),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  context.push('/groups');
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
 }
 
 String roleLabel(String? role) {

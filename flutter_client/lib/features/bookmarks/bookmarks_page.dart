@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
 import '../../widgets/widgets.dart';
+import '../home/app_drawer.dart';
 
 class BookmarksPage extends ConsumerStatefulWidget {
   const BookmarksPage({super.key});
@@ -42,9 +43,9 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
       appBar: AppBar(
+        leading: const DrawerMenuButton(),
         title: const Text('书签'),
         actions: [
-          const ScopeButton(),
           PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'tags') {

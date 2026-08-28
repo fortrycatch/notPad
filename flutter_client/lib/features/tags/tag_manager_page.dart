@@ -63,6 +63,7 @@ class _TagManagerPageState extends ConsumerState<TagManagerPage> {
       appBar: FrostedAppBar(title: Text(widget.title)),
       floatingActionButton: canEdit
           ? FloatingActionButton(
+              heroTag: 'tag-manager-fab',
               onPressed: _create,
               child: const Icon(Icons.add),
             )

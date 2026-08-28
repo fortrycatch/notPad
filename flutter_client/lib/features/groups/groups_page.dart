@@ -15,6 +15,7 @@ class GroupsPage extends ConsumerWidget {
     return Scaffold(
       appBar: FrostedAppBar(title: const Text('群组')),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'groups-fab',
         onPressed: () => context.push('/groups/create'),
         child: const Icon(Icons.add),
       ),

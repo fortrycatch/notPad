@@ -80,15 +80,19 @@ class _ImagesPageState extends ConsumerState<ImagesPage> {
         ],
       ),
       floatingActionButton: canEdit
-          ? FloatingActionButton(
-              onPressed: _uploading ? null : _upload,
-              child: _uploading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.add),
+          ? ShellFab(
+              child: FloatingActionButton(
+                heroTag: 'images-fab',
+                tooltip: '上传图片',
+                onPressed: _uploading ? null : _upload,
+                child: _uploading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.add),
+              ),
             )
           : null,
       body: AsyncBody(

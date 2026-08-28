@@ -64,6 +64,24 @@ class FrostedAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
+class ShellFab extends StatelessWidget {
+  const ShellFab({super.key, required this.child, this.enabled = true});
+
+  final Widget child;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!enabled) return child;
+    final nav = NavigationBarTheme.of(context).height ?? 80;
+    final safe = MediaQuery.viewPaddingOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: nav + safe + 8),
+      child: child,
+    );
+  }
+}
+
 class FrostedNavigationBar extends StatelessWidget {
   const FrostedNavigationBar({
     super.key,

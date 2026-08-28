@@ -10,50 +10,82 @@ class NavTabsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final nav = ref.watch(navTabsProvider);
+    final visible = nav.visible;
+    final hidden = nav.order.where((tab) => !nav.enabled.contains(tab)).toList();
+
     return Scaffold(
       appBar: FrostedAppBar(title: const Text('底部导航')),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      body: ListView(
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: Text(
-              '选择显示在底部的页面，长按拖动调整顺序。至少保留一项。',
+              '长按条目拖动，调整底栏从左到右的顺序。至少保留一项。',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           ),
-          Expanded(
-            child: ReorderableListView.builder(
-              itemCount: nav.order.length,
-              onReorder: (oldIndex, newIndex) {
-                ref.read(navTabsProvider.notifier).reorder(oldIndex, newIndex);
-              },
-              buildDefaultDragHandles: false,
-              itemBuilder: (context, index) {
-                final tab = nav.order[index];
-                final enabled = nav.enabled.contains(tab);
-                return ListTile(
-                  key: ValueKey(tab),
-                  leading: ReorderableDragStartListener(
-                    index: index,
-                    child: const Icon(Icons.drag_handle),
-                  ),
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: visible.length,
+            buildDefaultDragHandles: false,
+            onReorder: (oldIndex, newIndex) {
+              ref.read(navTabsProvider.notifier).reorder(oldIndex, newIndex);
+            },
+            itemBuilder: (context, index) {
+              final tab = visible[index];
+              return ReorderableDelayedDragStartListener(
+                key: ValueKey(tab),
+                index: index,
+                child: ListTile(
+                  leading: Icon(tab.icon),
                   title: Text(tab.label),
-                  subtitle: enabled ? const Text('显示在底栏') : const Text('仅侧边栏'),
-                  trailing: Switch(
-                    value: enabled,
-                    onChanged: (value) async {
-                      if (!value && nav.enabled.length <= 1) {
-                        showMessage(context, '至少保留一个底栏入口');
-                        return;
-                      }
-                      await ref.read(navTabsProvider.notifier).toggle(tab, value);
-                    },
+                  subtitle: Text('第 ${index + 1} 项'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Switch(
+                        value: true,
+                        onChanged: (_) async {
+                          if (visible.length <= 1) {
+                            showMessage(context, '至少保留一个底栏入口');
+                            return;
+                          }
+                          await ref.read(navTabsProvider.notifier).toggle(tab, false);
+                        },
+                      ),
+                      ReorderableDragStartListener(
+                        index: index,
+                        child: const Padding(
+                          padding: EdgeInsets.only(left: 4),
+                          child: Icon(Icons.drag_handle),
+                        ),
+                      ),
+                    ],
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
+          if (hidden.isNotEmpty) ...[
+            const Divider(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Text('未显示在底栏', style: Theme.of(context).textTheme.titleSmall),
+            ),
+            for (final tab in hidden)
+              ListTile(
+                leading: Icon(tab.icon),
+                title: Text(tab.label),
+                subtitle: const Text('打开后会出现在底栏末尾'),
+                trailing: Switch(
+                  value: false,
+                  onChanged: (_) {
+                    ref.read(navTabsProvider.notifier).toggle(tab, true);
+                  },
+                ),
+              ),
+          ],
         ],
       ),
     );

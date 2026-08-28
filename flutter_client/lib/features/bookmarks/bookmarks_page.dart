@@ -81,9 +81,12 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
         ],
       ),
       floatingActionButton: canEdit
-          ? FloatingActionButton(
-              onPressed: () => context.push('/bookmarks/create'),
-              child: const Icon(Icons.add),
+          ? ShellFab(
+              child: FloatingActionButton(
+                heroTag: 'bookmarks-fab',
+                onPressed: () => context.push('/bookmarks/create'),
+                child: const Icon(Icons.add),
+              ),
             )
           : null,
       body: AsyncBody(
@@ -115,9 +118,8 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
             },
             child: RefreshIndicator(
               onRefresh: () => ref.read(bookmarksProvider(_query).notifier).refresh(),
-              child: ListView.separated(
+              child: ListView.builder(
                 itemCount: data.items.length + (data.loadingMore ? 1 : 0),
-                separatorBuilder: (_, _) => const Divider(height: 1),
                 itemBuilder: (context, index) {
                   if (index >= data.items.length) {
                     return const Padding(
@@ -127,6 +129,7 @@ class _BookmarksPageState extends ConsumerState<BookmarksPage> {
                   }
                   final item = data.items[index];
                   return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     leading: Icon(typeIcon(item.type)),
                     title: Text(item.title),
                     subtitle: Text(

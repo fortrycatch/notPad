@@ -1,7 +1,9 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/media.dart';
 import '../../providers/lists.dart';
 import '../../providers/nav_tabs.dart';
 import '../../providers/session.dart';
@@ -56,11 +58,7 @@ class AppDrawer extends ConsumerWidget {
         child: ListView(
           children: [
             ListTile(
-              leading: CircleAvatar(
-                child: Text(
-                  (user?.name.isNotEmpty == true ? user!.name[0] : '?').toUpperCase(),
-                ),
-              ),
+              leading: UserAvatar(url: user?.avatar, name: user?.name),
               title: Text(user?.name ?? '未登录'),
               subtitle: Text(user?.email ?? ''),
               onTap: () => _go(context, '/settings/profile'),
@@ -172,5 +170,39 @@ class AppDrawer extends ConsumerWidget {
   void _goTab(BuildContext context, String location) {
     Navigator.of(context).pop();
     context.go(location);
+  }
+}
+
+class UserAvatar extends StatelessWidget {
+  const UserAvatar({super.key, this.url, this.name, this.radius = 20});
+
+  final String? url;
+  final String? name;
+  final double radius;
+
+  String get _initial {
+    final text = name?.trim() ?? '';
+    return text.isEmpty ? '?' : text[0].toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = url?.trim() ?? '';
+    if (raw.isEmpty) {
+      return CircleAvatar(radius: radius, child: Text(_initial));
+    }
+    final imageUrl = resolveMediaUrl(raw);
+    return CircleAvatar(
+      radius: radius,
+      child: ClipOval(
+        child: CachedNetworkImage(
+          imageUrl: imageUrl,
+          width: radius * 2,
+          height: radius * 2,
+          fit: BoxFit.cover,
+          errorWidget: (_, _, _) => Text(_initial),
+        ),
+      ),
+    );
   }
 }

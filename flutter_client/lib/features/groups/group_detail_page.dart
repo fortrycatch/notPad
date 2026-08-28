@@ -345,6 +345,7 @@ class _GroupInvitesPageState extends ConsumerState<GroupInvitesPage> {
     return Scaffold(
       appBar: FrostedAppBar(title: const Text('邀请')),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'group-invites-fab',
         onPressed: _createLink,
         child: const Icon(Icons.add_link),
       ),

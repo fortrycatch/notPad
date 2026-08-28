@@ -80,15 +80,19 @@ class _DrivePageState extends ConsumerState<DrivePage> {
         ],
       ),
       floatingActionButton: canEdit
-          ? FloatingActionButton(
-              onPressed: _uploading ? null : _upload,
-              child: _uploading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.upload_file),
+          ? ShellFab(
+              enabled: widget.folderId == null,
+              child: FloatingActionButton(
+                heroTag: 'drive-fab',
+                onPressed: _uploading ? null : _upload,
+                child: _uploading
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.upload_file),
+              ),
             )
           : null,
       body: AsyncBody(

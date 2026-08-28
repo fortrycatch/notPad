@@ -142,10 +142,53 @@ final todoListsProvider = FutureProvider.autoDispose<List<TodoList>>((ref) {
   return ref.read(apiProvider).todo.listLists();
 });
 
-final todoListProvider = FutureProvider.autoDispose.family<TodoList, String>((ref, id) {
-  ref.watch(sessionProvider.select((s) => '${s.groupId}|${s.token}'));
-  return ref.read(apiProvider).todo.getList(id);
-});
+class TodoListController extends AutoDisposeFamilyAsyncNotifier<TodoList, String> {
+  @override
+  Future<TodoList> build(String arg) async {
+    ref.watch(sessionProvider.select((s) => '${s.groupId}|${s.token}'));
+    return ref.read(apiProvider).todo.getList(arg);
+  }
+
+  Future<void> setDone(String itemId, bool done) async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final previous = current;
+    state = AsyncData(
+      current.copyWith(
+        items: [
+          for (final item in current.items)
+            if (item.id == itemId) item.copyWith(done: done) else item,
+        ],
+      ),
+    );
+    try {
+      await ref.read(apiProvider).todo.updateItem(id: itemId, done: done ? 1 : 0);
+    } catch (_) {
+      state = AsyncData(previous);
+      rethrow;
+    }
+  }
+
+  Future<void> removeItem(String itemId) async {
+    final current = state.valueOrNull;
+    if (current == null) return;
+    final previous = current;
+    state = AsyncData(
+      current.copyWith(
+        items: current.items.where((item) => item.id != itemId).toList(),
+      ),
+    );
+    try {
+      await ref.read(apiProvider).todo.deleteItem(itemId);
+    } catch (_) {
+      state = AsyncData(previous);
+      rethrow;
+    }
+  }
+}
+
+final todoListProvider = AutoDisposeAsyncNotifierProvider.family<
+    TodoListController, TodoList, String>(TodoListController.new);
 
 class BookmarksQuery {
   const BookmarksQuery({this.sort = 'time_desc', this.search = '', this.tagId, this.type});

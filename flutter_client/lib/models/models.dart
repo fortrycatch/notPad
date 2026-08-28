@@ -253,6 +253,18 @@ class TodoList {
   final DateTime updatedAt;
   final List<TodoItem> items;
 
+  TodoList copyWith({List<TodoItem>? items}) {
+    return TodoList(
+      id: id,
+      name: name,
+      color: color,
+      sortOrder: sortOrder,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      items: items ?? this.items,
+    );
+  }
+
   factory TodoList.fromJson(Object? json) {
     final map = asMap(json);
     return TodoList(
@@ -291,6 +303,21 @@ class TodoItem {
   final int sortOrder;
   final DateTime createdAt;
   final DateTime updatedAt;
+
+  TodoItem copyWith({bool? done}) {
+    return TodoItem(
+      id: id,
+      listId: listId,
+      title: title,
+      description: description,
+      done: done ?? this.done,
+      color: color,
+      refs: refs,
+      sortOrder: sortOrder,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+    );
+  }
 
   factory TodoItem.fromJson(Object? json) {
     final map = asMap(json);

@@ -36,7 +36,14 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         key: _scaffoldKey,
         extendBody: true,
         drawer: const AppDrawer(),
-        body: widget.navigationShell,
+        drawerEnableOpenDragGesture: true,
+        drawerEdgeDragWidth: 28,
+        body: Stack(
+          children: [
+            widget.navigationShell,
+            const _DrawerSwipeEdge(),
+          ],
+        ),
         bottomNavigationBar: destinations.isEmpty
             ? null
             : FrostedNavigationBar(
@@ -60,6 +67,28 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                     ),
                 ],
               ),
+      ),
+    );
+  }
+}
+
+class _DrawerSwipeEdge extends StatelessWidget {
+  const _DrawerSwipeEdge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      top: 0,
+      bottom: 0,
+      width: 28,
+      child: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onHorizontalDragUpdate: (details) {
+          if (details.primaryDelta != null && details.primaryDelta! > 6) {
+            HomeDrawerController.open(context);
+          }
+        },
       ),
     );
   }

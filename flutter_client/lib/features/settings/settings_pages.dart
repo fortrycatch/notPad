@@ -255,6 +255,7 @@ class _SettingKeysPageState extends ConsumerState<SettingKeysPage> {
     return Scaffold(
       appBar: FrostedAppBar(title: const Text('键值设置')),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'settings-keys-fab',
         onPressed: _edit,
         child: const Icon(Icons.add),
       ),

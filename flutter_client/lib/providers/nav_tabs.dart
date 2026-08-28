@@ -141,20 +141,26 @@ class NavTabsNotifier extends Notifier<NavTabsState> {
     final next = {...state.enabled};
     if (value) {
       next.add(tab);
+      final rest = state.order.where((item) => item != tab);
+      state = state.copyWith(enabled: next, order: [...rest, tab]);
     } else {
       if (next.length <= 1) return;
       next.remove(tab);
+      state = state.copyWith(enabled: next);
     }
-    state = state.copyWith(enabled: next);
     await _persist();
   }
 
   Future<void> reorder(int oldIndex, int newIndex) async {
-    final order = [...state.order];
+    final visible = [...state.visible];
+    if (visible.length < 2) return;
     if (newIndex > oldIndex) newIndex -= 1;
-    final item = order.removeAt(oldIndex);
-    order.insert(newIndex, item);
-    state = state.copyWith(order: order);
+    if (oldIndex < 0 || oldIndex >= visible.length) return;
+    if (newIndex < 0 || newIndex >= visible.length) return;
+    final item = visible.removeAt(oldIndex);
+    visible.insert(newIndex, item);
+    final hidden = state.order.where((tab) => !state.enabled.contains(tab));
+    state = state.copyWith(order: [...visible, ...hidden]);
     await _persist();
   }
 }

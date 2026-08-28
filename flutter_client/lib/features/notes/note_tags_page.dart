@@ -23,6 +23,7 @@ class NoteTagsPage extends ConsumerWidget {
       appBar: FrostedAppBar(title: Text(noteId == null ? '笔记标签' : '笔记标签')),
       floatingActionButton: canEdit
           ? FloatingActionButton(
+              heroTag: 'note-tags-fab',
               onPressed: () => _create(context, ref),
               child: const Icon(Icons.add),
             )

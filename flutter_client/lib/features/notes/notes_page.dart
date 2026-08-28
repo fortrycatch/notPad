@@ -52,9 +52,12 @@ class _NotesPageState extends ConsumerState<NotesPage> {
         ],
       ),
       floatingActionButton: canEdit
-          ? FloatingActionButton(
-              onPressed: () => context.push('/notes/create'),
-              child: const Icon(Icons.add),
+          ? ShellFab(
+              child: FloatingActionButton(
+                heroTag: 'notes-fab',
+                onPressed: () => context.push('/notes/create'),
+                child: const Icon(Icons.add),
+              ),
             )
           : null,
       body: AsyncBody(
@@ -84,9 +87,8 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                   },
                   child: RefreshIndicator(
                     onRefresh: () => ref.read(notesProvider(_query).notifier).refresh(),
-                    child: ListView.separated(
+                    child: ListView.builder(
                       itemCount: data.items.length + (data.loadingMore ? 1 : 0),
-                      separatorBuilder: (_, _) => const Divider(height: 1),
                       itemBuilder: (context, index) {
                         if (index >= data.items.length) {
                           return const Padding(
@@ -96,6 +98,7 @@ class _NotesPageState extends ConsumerState<NotesPage> {
                         }
                         final note = data.items[index];
                         return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                           title: Text(note.title.isEmpty ? '未命名笔记' : note.title),
                           subtitle: Text(
                             [

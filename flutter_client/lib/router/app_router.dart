@@ -21,6 +21,7 @@ import '../features/notes/note_edit_page.dart';
 import '../features/notes/note_tags_page.dart';
 import '../features/notes/notes_page.dart';
 import '../features/pickers/resource_picker_page.dart';
+import '../features/settings/nav_tabs_page.dart';
 import '../features/settings/settings_pages.dart';
 import '../features/settings/theme_page.dart';
 import '../features/splash/splash_page.dart';
@@ -30,6 +31,7 @@ import '../features/todos/todo_item_page.dart';
 import '../features/todos/todo_list_page.dart';
 import '../features/todos/todos_page.dart';
 import '../models/models.dart';
+import '../providers/nav_tabs.dart';
 import '../providers/session.dart';
 
 class _RouterRefresh extends ChangeNotifier {
@@ -58,7 +60,8 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/login';
       }
       if (session.isLoggedIn && (authPage || loc == '/splash' || loc == '/more')) {
-        return '/feed';
+        final tabs = ref.read(navTabsProvider).visible;
+        return tabs.isEmpty ? '/feed' : tabs.first.path;
       }
       return null;
     },
@@ -101,6 +104,22 @@ final routerProvider = Provider<GoRouter>((ref) {
               GoRoute(
                 path: '/bookmarks',
                 pageBuilder: (context, state) => const NoTransitionPage(child: BookmarksPage()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/images',
+                pageBuilder: (context, state) => const NoTransitionPage(child: ImagesPage()),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/drive',
+                pageBuilder: (context, state) => const NoTransitionPage(child: DrivePage()),
               ),
             ],
           ),
@@ -193,11 +212,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         parentNavigatorKey: _rootKey,
-        path: '/images',
-        builder: (context, state) => const ImagesPage(),
-      ),
-      GoRoute(
-        parentNavigatorKey: _rootKey,
         path: '/images/tags',
         builder: (context, state) {
           final extra = state.extra;
@@ -244,11 +258,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           }
           return const ImageViewerPage(url: '');
         },
-      ),
-      GoRoute(
-        parentNavigatorKey: _rootKey,
-        path: '/drive',
-        builder: (context, state) => const DrivePage(),
       ),
       GoRoute(
         parentNavigatorKey: _rootKey,
@@ -307,6 +316,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootKey,
         path: '/settings/theme',
         builder: (context, state) => const ThemePage(),
+      ),
+      GoRoute(
+        parentNavigatorKey: _rootKey,
+        path: '/settings/nav',
+        builder: (context, state) => const NavTabsPage(),
       ),
       GoRoute(
         parentNavigatorKey: _rootKey,

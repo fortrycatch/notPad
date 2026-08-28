@@ -10,6 +10,7 @@ import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
 import '../../widgets/widgets.dart';
+import '../home/app_drawer.dart';
 
 class ImagesPage extends ConsumerStatefulWidget {
   const ImagesPage({super.key});
@@ -40,6 +41,7 @@ class _ImagesPageState extends ConsumerState<ImagesPage> {
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
       appBar: AppBar(
+        leading: const DrawerMenuButton(),
         title: const Text('图床'),
         actions: [
           PopupMenuButton<String>(

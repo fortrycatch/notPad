@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../providers/lists.dart';
+import '../../providers/nav_tabs.dart';
 import '../../providers/session.dart';
 import '../../widgets/widgets.dart';
 
@@ -47,6 +48,8 @@ class AppDrawer extends ConsumerWidget {
     final user = session.user;
     final groups = ref.watch(groupsProvider).valueOrNull ?? const [];
     final currentGroup = groups.where((item) => item.id == session.groupId).firstOrNull;
+    final nav = ref.watch(navTabsProvider);
+    final hiddenTabs = nav.order.where((tab) => !nav.enabled.contains(tab)).toList();
 
     return Drawer(
       child: SafeArea(
@@ -104,17 +107,16 @@ class AppDrawer extends ConsumerWidget {
                 ),
               ],
             ),
+            if (hiddenTabs.isNotEmpty) ...[
+              const Divider(),
+              for (final tab in hiddenTabs)
+                ListTile(
+                  leading: Icon(tab.icon),
+                  title: Text(tab.label),
+                  onTap: () => _goTab(context, tab.path),
+                ),
+            ],
             const Divider(),
-            ListTile(
-              leading: const Icon(Icons.image_outlined),
-              title: const Text('图床'),
-              onTap: () => _go(context, '/images'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.folder_outlined),
-              title: const Text('网盘'),
-              onTap: () => _go(context, '/drive'),
-            ),
             ListTile(
               leading: const Icon(Icons.mail_outline),
               title: const Text('我的邀请'),
@@ -135,6 +137,11 @@ class AppDrawer extends ConsumerWidget {
               leading: const Icon(Icons.palette_outlined),
               title: const Text('主题色'),
               onTap: () => _go(context, '/settings/theme'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.dashboard_customize_outlined),
+              title: const Text('底部导航'),
+              onTap: () => _go(context, '/settings/nav'),
             ),
             ListTile(
               leading: const Icon(Icons.settings_outlined),
@@ -160,5 +167,10 @@ class AppDrawer extends ConsumerWidget {
   void _go(BuildContext context, String location) {
     Navigator.of(context).pop();
     context.push(location);
+  }
+
+  void _goTab(BuildContext context, String location) {
+    Navigator.of(context).pop();
+    context.go(location);
   }
 }

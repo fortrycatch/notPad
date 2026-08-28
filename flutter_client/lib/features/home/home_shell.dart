@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../providers/lists.dart';
+import '../../providers/nav_tabs.dart';
 import 'app_drawer.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
@@ -20,43 +21,43 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   @override
   Widget build(BuildContext context) {
     ref.watch(groupsProvider);
+    final nav = ref.watch(navTabsProvider);
+    final current = HomeTab.values[widget.navigationShell.currentIndex];
+    final destinations = [
+      ...nav.visible,
+      if (!nav.visible.contains(current)) current,
+    ];
+    final selectedIndex = destinations.indexOf(current).clamp(0, destinations.length - 1);
+
     return HomeDrawerController(
       openDrawer: () => _scaffoldKey.currentState?.openDrawer(),
       child: Scaffold(
         key: _scaffoldKey,
         drawer: const AppDrawer(),
         body: widget.navigationShell,
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: widget.navigationShell.currentIndex,
-          onDestinationSelected: (index) {
-            widget.navigationShell.goBranch(
-              index,
-              initialLocation: index == widget.navigationShell.currentIndex,
-            );
-          },
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.dynamic_feed_outlined),
-              selectedIcon: Icon(Icons.dynamic_feed),
-              label: '动态',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.sticky_note_2_outlined),
-              selectedIcon: Icon(Icons.sticky_note_2),
-              label: '笔记',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.check_circle_outline),
-              selectedIcon: Icon(Icons.check_circle),
-              label: '待办',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.bookmark_outline),
-              selectedIcon: Icon(Icons.bookmark),
-              label: '书签',
-            ),
-          ],
-        ),
+        bottomNavigationBar: destinations.isEmpty
+            ? null
+            : NavigationBar(
+                selectedIndex: selectedIndex,
+                labelBehavior: destinations.length > 4
+                    ? NavigationDestinationLabelBehavior.onlyShowSelected
+                    : NavigationDestinationLabelBehavior.alwaysShow,
+                onDestinationSelected: (index) {
+                  final tab = destinations[index];
+                  widget.navigationShell.goBranch(
+                    tab.index,
+                    initialLocation: tab.index == widget.navigationShell.currentIndex,
+                  );
+                },
+                destinations: [
+                  for (final tab in destinations)
+                    NavigationDestination(
+                      icon: Icon(tab.icon),
+                      selectedIcon: Icon(tab.selectedIcon),
+                      label: tab.label,
+                    ),
+                ],
+              ),
       ),
     );
   }

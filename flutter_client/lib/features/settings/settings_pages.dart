@@ -28,6 +28,12 @@ class SettingsPage extends ConsumerWidget {
             onTap: () => context.push('/settings/theme'),
           ),
           ListTile(
+            leading: const Icon(Icons.dashboard_customize_outlined),
+            title: const Text('底部导航'),
+            subtitle: const Text('选择底栏显示的页面'),
+            onTap: () => context.push('/settings/nav'),
+          ),
+          ListTile(
             leading: const Icon(Icons.dns_outlined),
             title: const Text('服务器地址'),
             subtitle: Text(session.baseUrl),

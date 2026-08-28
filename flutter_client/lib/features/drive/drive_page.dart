@@ -10,6 +10,7 @@ import '../../models/models.dart';
 import '../../providers/lists.dart';
 import '../../providers/session.dart';
 import '../../widgets/widgets.dart';
+import '../home/app_drawer.dart';
 
 class DrivePage extends ConsumerStatefulWidget {
   const DrivePage({super.key, this.folderId});
@@ -44,6 +45,7 @@ class _DrivePageState extends ConsumerState<DrivePage> {
     final canEdit = ref.watch(sessionProvider).canEdit;
     return Scaffold(
       appBar: AppBar(
+        leading: widget.folderId == null ? const DrawerMenuButton() : null,
         title: Text(async.valueOrNull?.currentFolder?.name ?? '网盘'),
         actions: [
           PopupMenuButton<String>(
